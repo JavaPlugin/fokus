@@ -14,7 +14,6 @@ import {
   usePalette,
   useScheme,
 } from '@fokus/ui';
-import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, Text, View, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
