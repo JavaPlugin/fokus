@@ -58,3 +58,10 @@ export function weekSummary(
     bestDay: best.focus > 0 ? best.day : null,
   };
 }
+
+/** Was zurückgeholte Zeit „wert“ ist: ein Kapitel ≈ 2 Std., ein Training ≈ 2,5 Std. */
+export function equivalents(minutes: number): { chapters: number; trainings: number } | null {
+  const chapters = Math.floor(minutes / 120);
+  const trainings = Math.floor(minutes / 150);
+  return chapters || trainings ? { chapters, trainings } : null;
+}

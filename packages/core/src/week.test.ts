@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { streak } from './streak';
-import { weekDays, weekSummary } from './week';
+import { equivalents, weekDays, weekSummary } from './week';
 
 describe('Serie', () => {
   const goal = 60;
@@ -62,5 +62,13 @@ describe('Woche', () => {
     );
     expect(more.regained).toBe(0);
     expect(more.bestDay).toBeNull();
+  });
+});
+
+describe('Gegenwert', () => {
+  it('Kapitel und Trainings, erst ab etwa 2 Stunden', () => {
+    expect(equivalents(370)).toEqual({ chapters: 3, trainings: 2 });
+    expect(equivalents(125)).toEqual({ chapters: 1, trainings: 0 });
+    expect(equivalents(90)).toBeNull();
   });
 });

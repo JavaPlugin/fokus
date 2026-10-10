@@ -26,6 +26,7 @@ import { registerSettingsRoutes } from './settings-routes';
 import { registerTaskRoutes } from './task-routes';
 import { registerDayRoutes } from './day-routes';
 import { registerRedirectRoutes } from './redirect-routes';
+import { registerWeekRoutes } from './week-routes';
 import { createPush, type PushSend } from './push';
 import { createMailer, e2eOutbox, type Mailer } from './mail';
 import { loadEmailTemplates, registerEmailTemplateRoutes } from './email-templates';
@@ -400,6 +401,7 @@ export function createApp({
   registerTaskRoutes(app, { db });
   registerDayRoutes(app, { db });
   registerRedirectRoutes(app, { db });
+  registerWeekRoutes(app, { db });
   registerApiKeyRoutes(app, { db });
   registerWebhookRoutes(app, { db, hooks, resolve: webhookResolve });
 

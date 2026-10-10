@@ -100,7 +100,7 @@ export function instant(day: Day, hhmm: string, timeZone = TIME_ZONE): number {
 export const isoOf = (ms: number): string => new Date(ms).toISOString();
 
 /** Kalendertag eines Zeitpunkts in der Zeitzone. */
-export const dayInZone = (at: string | number, timeZone = TIME_ZONE): Day =>
+export const dayInZone = (at: string | number | Date, timeZone = TIME_ZONE): Day =>
   todayIn(timeZone, new Date(at));
 
 /** „09:30“ eines Zeitpunkts in der Zeitzone. */

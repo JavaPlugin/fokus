@@ -44,6 +44,10 @@ test('Beispieldaten und Screenshots', async ({ page, request }) => {
     await expect(page.getByText('Scroll-Guthaben')).toBeVisible();
     await page.waitForTimeout(400);
     await shot(page, 'heute', scheme);
+    await page.goto('/woche');
+    await expect(page.getByText('Vom Scrollen zurückgeholt')).toBeVisible();
+    await page.waitForTimeout(300);
+    await shot(page, 'woche', scheme);
     await page.goto('/inbox');
     await expect(page.getByText('Notizen')).toBeVisible();
     await page.waitForTimeout(300);

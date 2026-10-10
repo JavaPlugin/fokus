@@ -4,6 +4,11 @@ Alle Versionen von FOKUS. Installiert wird über Admin-Panel → System (Tag `vX
 
 ## Unveröffentlicht
 
+### Phase 4: Woche
+
+- Woche: „Vom Scrollen zurückgeholt“ als Zeit-Konto, Balken Fokus und Social pro Tag, Fokus-Zeit, Serie, Gegenwert in Kapiteln und Trainings, Wochen blättern.
+- Profil → Planung: Länge von Fokus und Pause, Guthaben pro Stunde, Tageslimit, Arbeitstag, übliche Scroll-Zeit.
+
 ### Phase 3: Umleiten, Social-Slots, Erinnerungen
 
 - Umleiten: Öffnest du Instagram, TikTok & Co. außerhalb eines Slots, zeigt FOKUS eine 2-Minuten-Aufgabe. Optionen: Aufgabe machen (+3 Min.), 10 Min. vom Guthaben nehmen, trotzdem öffnen. Anleitung für die iPhone-Kurzbefehle in der Einführung und im Profil.

@@ -35,3 +35,24 @@ test('Einführung zeigt die Umleiten-Anleitung', async ({ page }) => {
   await expect(page.getByText('Umleiten statt sperren')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Adresse kopieren' })).toBeVisible();
 });
+
+test('Woche zeigt Zeit-Konto und Serie', async ({ page }) => {
+  await page.goto('/woche');
+  await expect(page.getByText('Vom Scrollen zurückgeholt')).toBeVisible();
+  await expect(page.getByText('Fokus-Zeit')).toBeVisible();
+  await expect(page.getByText('Serie', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Vorherige Woche' }).click();
+  await expect(page.getByText('Woche', { exact: true }).first()).toBeVisible();
+});
+
+test('Planung im Profil ändern', async ({ page }) => {
+  await page.goto('/profil');
+  await page
+    .getByRole('button', { name: /Planung/ })
+    .first()
+    .click();
+  await page.getByRole('button', { name: '60 Min.' }).first().click();
+  const s = await (await page.request.get('/api/plan/settings')).json();
+  expect(s.focusMinutes).toBe(60);
+  await page.request.put('/api/plan/settings', { data: { focusMinutes: 50 } });
+});

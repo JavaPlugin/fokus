@@ -27,18 +27,21 @@ export function Hero({
   label,
   value,
   unit,
+  extra,
   sub,
 }: {
   label: string;
   value: string;
   unit?: string;
+  /** Zweite Zahl mit Einheit, z. B. „6 Std“ + „10 Min“ */
+  extra?: { value: string; unit: string };
   sub?: string;
 }) {
   const p = usePalette();
   return (
     <View
       accessible
-      accessibilityLabel={`${label}: ${value}${unit ? ` ${unit}` : ''}`}
+      accessibilityLabel={`${label}: ${value}${unit ? ` ${unit}` : ''}${extra ? ` ${extra.value} ${extra.unit}` : ''}`}
       style={{ gap: 2 }}
     >
       <Text style={[type.small, { color: p.ink2, fontSize: 15 }]}>{label}</Text>
@@ -67,6 +70,34 @@ export function Hero({
           >
             {unit}
           </Text>
+        ) : null}
+        {extra ? (
+          <>
+            <Text
+              style={[
+                type.hero,
+                tabular,
+                {
+                  color: p.ink,
+                  fontSize: 72,
+                  lineHeight: 76,
+                  letterSpacing: -3,
+                  fontFamily: font.bold,
+                  marginLeft: 8,
+                },
+              ]}
+            >
+              {extra.value}
+            </Text>
+            <Text
+              style={[
+                tabular,
+                { color: p.ink3, fontSize: 36, fontFamily: font.semibold, letterSpacing: -1 },
+              ]}
+            >
+              {extra.unit}
+            </Text>
+          </>
         ) : null}
       </View>
       {sub ? (

@@ -446,3 +446,53 @@ describe('Umleiten', () => {
     expect((await req<R>('GET', '/api/redirect?app=unbekannt')).data.label).toBe('Social Media');
   });
 });
+
+describe('Woche', () => {
+  type W = {
+    start: string;
+    end: string;
+    focus: number;
+    social: number;
+    regained: number;
+    expectedSocial: number;
+    streak: number;
+    tasksDone: number;
+    bestDay: string | null;
+    days: { day: string; focus: number; social: number }[];
+  };
+
+  it('Fokus, Social, zurückgeholt, Serie und erledigte Aufgaben', async () => {
+    const empty = await req<W>('GET', `/api/week/${todayIn()}`);
+    expect(empty.data.days).toHaveLength(7);
+    expect(empty.data).toMatchObject({
+      focus: 0,
+      social: 0,
+      streak: 0,
+      tasksDone: 0,
+      bestDay: null,
+    });
+
+    await req('PUT', '/api/plan/settings', { streakGoal: 30 });
+    const t = await req<Task>('POST', '/api/tasks', { title: 'Konzept', minutes: 60 });
+    const s = await req<{ id: string }>('POST', '/api/focus/start', { taskId: t.data.id });
+    await h.db.execute(
+      `update focus_session set started_at = now() - interval '45 minutes' where id = '${s.data.id}'` as never,
+    );
+    await req('POST', `/api/focus/${s.data.id}/finish`, { taskDone: true });
+    await h.db.insert(creditEntry).values({ userId, minutes: 100, reason: 'focus' });
+    await req('POST', '/api/credit/spend', { minutes: 20, reason: 'social' });
+
+    const w = await req<W>('GET', `/api/week/${todayIn()}`);
+    expect(w.data).toMatchObject({
+      focus: 45,
+      social: 20,
+      streak: 1,
+      tasksDone: 1,
+      bestDay: todayIn(),
+    });
+    const todayRow = w.data.days.find((d) => d.day === todayIn())!;
+    expect(todayRow).toEqual({ day: todayIn(), focus: 45, social: 20 });
+    expect(w.data.regained).toBe(w.data.expectedSocial - 20);
+    expect((await req('GET', '/api/week/kaputt')).status).toBe(400);
+  });
+});

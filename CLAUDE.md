@@ -47,6 +47,8 @@ Auftrag und Konzept: `PROMPT.md`. Design-Entwürfe: `design/` (HTML, im Browser 
 - Phase 3: Social-Slots: `components/SocialSheet.tsx` (in 30 Min. / volle Stunden, 10–45 Min.), Start im `BlockSheet` zieht Guthaben ab.
 - Phase 3: Erinnerungen `apps/api/src/reminders.ts`: jede Minute (Server mit `jobs: true`), 5 Min. vor Fokus-Block/Social-Slot (Schlüssel `block:{id}`), Tagesrückblick ab 20 Uhr Berlin (`recap:{tag}`, nur bei Aktivität). Liest über `withAdmin` (Migration `0004` gibt `admin_read` auf `time_block`, `focus_session`, `credit_entry`).
 
+- Phase 4: `GET /api/week/:tag` (`week-routes.ts`): Fokus je Tag aus fertigen `focus_session`, Social je Tag aus ausgegebenem Guthaben (`spentOn`), Zeit-Konto `weekSummary` (Basis `baselineScroll` × vergangene Tage − Social), Serie über 120 Tage, erledigte Aufgaben. Screen `(tabs)/woche.tsx` (Balken Fokus/Social, Wochenwechsel, Gegenwert `equivalents`: Kapitel ≈ 2 Std., Training ≈ 2,5 Std.). Rückblick = Tagesrückblick (Phase 3) plus Zeile mit bestem Tag und erledigten Aufgaben auf der Woche. Profil → Planung (`components/PlanSettings.tsx`) stellt Fokus/Pause/Guthaben/Limit/Arbeitstag/Basis ein.
+
 ## Befehle
 
 ```bash

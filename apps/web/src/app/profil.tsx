@@ -32,6 +32,7 @@ import { goBack } from '../components/BackButton';
 import { rememberMe, useMe } from '../components/HeadButtons';
 import { LegalLinks } from '../components/LegalLinks';
 import { NotifySettings } from '../components/NotifySettings';
+import { PlanSettings } from '../components/PlanSettings';
 import { Screen } from '../components/Screen';
 import { api, authClient } from '../lib/api';
 import { endSession } from '../lib/session';
@@ -43,7 +44,7 @@ import { chooseGlass, chooseLessMotion, chooseScheme } from '../lib/theme';
 import { navigateAfterSheets } from '../lib/nav';
 import { useInstall } from '../lib/install';
 
-type SheetKind = 'notify' | 'look' | 'data' | 'name' | null;
+type SheetKind = 'notify' | 'plan' | 'look' | 'data' | 'name' | null;
 type Prefs = { channel: 'app' | 'email' | 'both' };
 
 const CHANNEL = { app: 'In der App', email: 'Per E-Mail', both: 'App und E-Mail' } as const;
@@ -94,6 +95,15 @@ export default function Profil() {
       keys: 'mitteilung push e-mail erinnerung rückblick',
       onPress: () => setSheet('notify'),
       wide: true,
+    },
+    {
+      id: 'plan',
+      symbol: 'uhr',
+      color: accents.blue.from,
+      title: 'Planung',
+      detail: 'Fokus-Länge, Guthaben, Arbeitstag',
+      keys: 'fokus pause guthaben limit arbeitstag minuten scrollen basis',
+      onPress: () => setSheet('plan'),
     },
     {
       id: 'look',
@@ -338,6 +348,9 @@ export default function Profil() {
 
       <Sheet open={sheet === 'notify'} onClose={() => setSheet(null)} title="Benachrichtigungen">
         <NotifySettings />
+      </Sheet>
+      <Sheet open={sheet === 'plan'} onClose={() => setSheet(null)} title="Planung">
+        {sheet === 'plan' ? <PlanSettings /> : null}
       </Sheet>
       <Sheet open={sheet === 'look'} onClose={() => setSheet(null)} title="Darstellung">
         <Chips>
