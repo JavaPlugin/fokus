@@ -190,11 +190,7 @@ export default function Umleiten() {
           <Text style={[type.small, { color: dark ? tint.text : p.ink2 }]}>
             {info.task ? 'Aus deinem Plan' : 'Vorschlag'} · {minutes} Min
           </Text>
-          <Text
-            // @ts-expect-error dataSet gibt es nur in react-native-web
-            dataSet={{ private: '' }}
-            style={[type.section, { color: p.ink, marginTop: 6, fontFamily: font.semibold }]}
-          >
+          <Text style={[type.section, { color: p.ink, marginTop: 6, fontFamily: font.semibold }]}>
             {title}
           </Text>
           {info.bonus ? (

@@ -7,8 +7,8 @@ test.use({ storageState: STATE });
 test('Titel je Seite, auch beim Wischen zwischen Tabs', async ({ page }) => {
   for (const [path, title] of [
     ['/', 'Heute'],
+    ['/aufgaben', 'Aufgaben'],
     ['/woche', 'Woche'],
-    ['/inbox', 'Inbox'],
     ['/fokus', 'Fokus'],
     ['/profil', 'Profil'],
     ['/admin', 'System'],
@@ -32,8 +32,8 @@ test('⌘K-Palette: Browser-Zurück schließt sie, die Seite bleibt', async ({ p
   await expect(page).toHaveURL(/\/woche$/);
   // Befehl ausführen schließt die Palette und navigiert
   await page.keyboard.press('Control+k');
-  await box.fill('inbox');
+  await box.fill('aufgaben');
   await box.press('Enter');
-  await expect(page).toHaveURL(/\/inbox$/);
+  await expect(page).toHaveURL(/\/aufgaben$/);
   await expect(box).toBeHidden();
 });

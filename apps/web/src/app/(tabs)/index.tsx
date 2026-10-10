@@ -1,10 +1,7 @@
-import { clock, earnedFor, minutesBetween, MIN_MS } from '@fokus/core';
+import { MIN_MS, clock, earnedFor } from '@fokus/core';
 import {
   Body,
-  BlockRow,
   Button,
-  Chip,
-  Chips,
   Hero,
   KindCard,
   SymbolIcon,
@@ -16,33 +13,25 @@ import {
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
-import { BlockSheet } from '../../components/BlockSheet';
-import { SocialSheet } from '../../components/SocialSheet';
 import { HeadButtons } from '../../components/HeadButtons';
 import { Screen, type ScreenHead } from '../../components/Screen';
-import { useDay, type Block } from '../../lib/day';
+import { TaskRow, rowSub } from '../../components/TaskRow';
+import { useTaskEditor } from '../../components/useTaskEditor';
+import { useDay, type Item } from '../../lib/day';
 import { dayLabel, minutesText } from '../../lib/format';
+import { useUndo } from '../../lib/undo';
 
-const KIND_LABEL = { focus: 'Fokus', pause: 'Pause', social: 'Social', event: 'Termin' } as const;
+const endOf = (i: Item) => new Date(i.start).getTime() + i.minutes * MIN_MS;
 
-/** Zeile unter dem Titel eines Blocks. */
-function subOf(b: Block, perHour: number) {
-  const m = `${b.minutes} Min`;
-  if (b.kind === 'focus') return `Fokus · +${earnedFor(b.minutes, perHour)} Min Guthaben`;
-  if (b.kind === 'social') return `${m} · vom Guthaben`;
-  return `${KIND_LABEL[b.kind]} · ${m}`;
-}
-
-const endOf = (b: Block) => new Date(b.startsAt).getTime() + b.minutes * MIN_MS;
-
-/** Heute: Scroll-Guthaben, aktueller Fokus-Block, Tagesliste. */
+/** Heute: Scroll-Guthaben, was als Nächstes dran ist, der Tag. */
 export default function Heute() {
   const p = usePalette();
   const focusText = useKindText('focus');
-  const { data, error, planToday, startFocus, setEnergy, fillGap } = useDay();
+  const day = useDay();
+  const { data, error } = day;
+  const undo = useUndo();
+  const editor = useTaskEditor();
   const [now, setNow] = useState(Date.now());
-  const [open, setOpen] = useState<Block | null>(null);
-  const [social, setSocial] = useState(false);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState('');
   const head: ScreenHead = { title: 'Heute', right: <HeadButtons /> };
@@ -66,55 +55,48 @@ export default function Heute() {
     );
   }
 
-  const blocks = data.blocks.filter((b) => b.status !== 'skipped');
+  const items = data.items.filter((i) => !undo.hidden.has(i.key));
   const perHour = data.settings.creditPerHour;
-  const nextSocial = blocks.find(
-    (b) => b.kind === 'social' && b.status === 'planned' && endOf(b) > now,
-  );
-  const running = data.running ? blocks.find((b) => b.id === data.running!.blockId) : undefined;
-  // Jetzt: laufender Block, sonst der Fokus-Block, dessen Zeit gerade ist, sonst der nächste
-  const current =
-    running ??
-    blocks.find(
-      (b) =>
-        b.kind === 'focus' &&
-        b.status === 'planned' &&
-        new Date(b.startsAt).getTime() <= now &&
-        endOf(b) > now,
-    );
-  const upcoming = blocks.find(
-    (b) => b.kind === 'focus' && b.status === 'planned' && new Date(b.startsAt).getTime() > now,
-  );
-  const hero = current ?? upcoming;
-  const counted = blocks.filter((b) => b.kind !== 'pause');
-  const done = counted.filter((b) => b.status === 'done').length;
+  const running = data.running;
+  // Als Nächstes: laufende Aufgabe, sonst die erste offene Arbeit oder Social-Zeit, die noch nicht vorbei ist
+  const current = running
+    ? items.find((i) => i.taskId === running.taskId && i.day === running.day)
+    : undefined;
+  const next =
+    current ??
+    items.find((i) => !i.done && (i.kind === 'work' || i.kind === 'social') && endOf(i) > now);
+  const gap = data.gaps.find((g) => new Date(g.end).getTime() > now);
+  const hours = data.hours ? `Arbeitszeit ${data.hours.from}–${data.hours.to}` : 'Heute frei';
 
-  const sub = [
-    data.focusMinutes ? `${minutesText(data.focusMinutes)} Fokus heute` : 'Noch kein Fokus heute',
-    nextSocial ? `nächster Social-Slot ${clock(nextSocial.startsAt)}` : null,
-  ]
-    .filter(Boolean)
-    .join(' · ');
-
-  async function start(b: Block) {
-    setBusy(true);
+  async function toggle(i: Item) {
+    if (!i.taskId) return;
+    setNote('');
     try {
-      await startFocus({ blockId: b.id });
-      router.push('/fokus-modus');
-    } finally {
-      setBusy(false);
+      await day.setDone(i.taskId, i.day, !i.done);
+      if (!i.done)
+        undo.notify(`„${i.title}“ erledigt`, () => void day.setDone(i.taskId!, i.day, false));
+    } catch (e) {
+      setNote((e as Error).message);
     }
   }
 
-  async function plan() {
+  async function start(i: Item) {
+    if (!i.taskId) return;
     setBusy(true);
     setNote('');
     try {
-      const r = await planToday();
-      if (r.unplaced.length)
-        setNote(
-          `${r.unplaced.length} ${r.unplaced.length === 1 ? 'Aufgabe passt' : 'Aufgaben passen'} nicht mehr in den Tag.`,
+      if (i.kind === 'social') {
+        const r = await day.spend(i.minutes, 'social');
+        await day.setDone(i.taskId, i.day, true);
+        undo.notify(
+          r.short > 0
+            ? `Social-Zeit gestartet: ${r.granted} von ${i.minutes} Min. vom Guthaben (mehr war nicht da)`
+            : `Social-Zeit gestartet: ${r.granted} Min. vom Guthaben`,
         );
+      } else {
+        await day.startFocus({ taskId: i.taskId, minutes: i.minutes });
+        router.push('/fokus-modus');
+      }
     } catch (e) {
       setNote((e as Error).message);
     } finally {
@@ -122,176 +104,164 @@ export default function Heute() {
     }
   }
 
-  const openTasks = data.tasks.filter((t) => !t.mini).length;
-  const remaining = running
-    ? Math.max(0, data.running!.plannedMinutes - minutesBetween(data.running!.startedAt, now))
-    : current
-      ? Math.max(0, Math.ceil((endOf(current) - now) / MIN_MS))
-      : 0;
-
   return (
     <Screen head={head}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Text style={[type.body, { color: p.ink2 }]}>{dayLabel(data.day)}</Text>
-      </View>
+      <Text style={[type.body, { color: p.ink2 }]}>{dayLabel(data.day)}</Text>
 
-      <Hero label="Scroll-Guthaben" value={String(data.credit.balance)} unit="Min" sub={sub} />
+      <Hero
+        label="Scroll-Guthaben"
+        value={String(data.credit.balance)}
+        unit="Min"
+        sub={`Je 1 Std. Fokus bekommst du ${perHour} Min. für Social Media.`}
+      />
 
-      {hero ? (
+      {next ? (
         <KindCard>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
             <View style={{ flex: 1 }}>
               <Text style={[type.small, { color: focusText }]}>
-                {running
-                  ? `Läuft · bis ${clock(new Date(data.running!.startedAt).getTime() + data.running!.plannedMinutes * MIN_MS)}`
-                  : current
-                    ? `Jetzt · bis ${clock(endOf(current))}`
-                    : `Als Nächstes · ${clock(hero.startsAt)}`}
+                {running && next === current ? 'Läuft' : `Als Nächstes · ${clock(next.start)}`}
               </Text>
               <Text
                 numberOfLines={2}
-                // @ts-expect-error dataSet gibt es nur in react-native-web
-                dataSet={{ private: '' }}
                 style={[type.section, { color: p.ink, marginTop: 4, fontFamily: font.semibold }]}
               >
-                {hero.title || 'Fokus'}
+                {next.title}
               </Text>
               <Text style={[type.small, { color: p.ink2, marginTop: 4 }]}>
-                {running || current
-                  ? `Fokus-Block · ${remaining} Min. übrig`
-                  : `Fokus-Block · ${hero.minutes} Min.`}
+                {next.kind === 'work'
+                  ? `${next.minutes} Min · bringt +${earnedFor(next.minutes, perHour)} Min Guthaben`
+                  : `${next.minutes} Min · kostet ${next.minutes} Min Guthaben`}
               </Text>
             </View>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={running ? 'Zum Timer' : 'Fokus starten'}
+              accessibilityLabel={running && next === current ? 'Zum Timer' : 'Start'}
               disabled={busy}
-              onPress={() => (running ? router.push('/fokus-modus') : void start(hero))}
+              onPress={() =>
+                running && next === current ? router.push('/fokus-modus') : void start(next)
+              }
               style={{
-                width: 52,
-                height: 52,
-                borderRadius: 26,
+                height: 44,
+                borderRadius: 22,
+                paddingHorizontal: 16,
                 backgroundColor: p.ink,
+                flexDirection: 'row',
                 alignItems: 'center',
-                justifyContent: 'center',
+                gap: 6,
                 opacity: busy ? 0.5 : 1,
               }}
             >
-              <SymbolIcon name="play" color={p.bg} size={20} />
+              <SymbolIcon name="play" color={p.bg} size={14} />
+              <Text style={[type.body, { color: p.bg, fontFamily: font.semibold }]}>
+                {running && next === current ? 'Timer' : 'Start'}
+              </Text>
             </Pressable>
           </View>
         </KindCard>
-      ) : (
-        <KindCard>
-          <Text style={[type.section, { color: p.ink }]}>
-            {blocks.length ? 'Für heute ist alles geplant.' : 'Noch nichts geplant.'}
-          </Text>
-          <Text style={[type.small, { color: p.ink2, marginTop: 4, marginBottom: 12 }]}>
-            {openTasks
-              ? `${openTasks} offene ${openTasks === 1 ? 'Aufgabe' : 'Aufgaben'}. FOKUS legt sie in deine freie Zeit.`
-              : 'Leg mit dem Plus unten eine Aufgabe an.'}
-          </Text>
-          {openTasks ? <Button label="Tag planen" loading={busy} onPress={plan} /> : null}
-        </KindCard>
-      )}
-      {note ? <Body muted>{note}</Body> : null}
-
-      {!data.energy && new Date(now).getHours() < 14 ? (
-        <View style={{ backgroundColor: p.surface, borderRadius: 20, padding: 16, gap: 12 }}>
-          <Text style={[type.body, { color: p.ink, fontFamily: font.semibold }]}>
-            Wie viel Energie hast du heute?
-          </Text>
-          <Text style={[type.small, { color: p.ink2 }]}>
-            Bei hoher Energie kommen schwere Aufgaben in deine Hochphase, bei niedriger zuletzt.
-          </Text>
-          <Chips>
-            {(
-              [
-                ['low', 'Niedrig'],
-                ['normal', 'Normal'],
-                ['high', 'Hoch'],
-              ] as const
-            ).map(([k, l]) => (
-              <Chip key={k} label={l} onPress={() => void setEnergy(k)} />
-            ))}
-          </Chips>
-        </View>
       ) : null}
 
-      <View style={{ gap: 12 }}>
+      <View style={{ gap: 10 }}>
         <View
           style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' }}
         >
-          <Text accessibilityRole="header" style={[type.section, { color: p.ink, fontSize: 22 }]}>
-            Dein Tag
+          <Text accessibilityRole="header" style={[type.section, { color: p.ink, fontSize: 20 }]}>
+            Heute
           </Text>
-          <Text style={[type.small, { color: p.ink2 }]}>
-            {counted.length ? `${done} von ${counted.length} erledigt` : ''}
-          </Text>
+          <Text style={[type.small, { color: p.ink2 }]}>{hours}</Text>
         </View>
-        {blocks.length ? (
+
+        {items.length ? (
           <View style={{ gap: 8 }}>
-            {blocks.map((b) => (
-              <BlockRow
-                key={b.id}
-                time={clock(b.startsAt)}
-                title={b.title || KIND_LABEL[b.kind]}
-                sub={subOf(b, perHour)}
-                kind={b.kind === 'event' ? 'warning' : b.kind}
-                state={b.status === 'done' ? 'done' : b.status === 'running' ? 'now' : 'next'}
-                onPress={() => setOpen(b)}
+            {items.map((i) => (
+              <TaskRow
+                key={i.key}
+                title={i.title}
+                sub={rowSub(clock(i.start), i.minutes, i.kind, i.how, i.recurring)}
+                kind={i.kind}
+                done={i.done}
+                highlight={!!running && i.taskId === running.taskId && i.day === running.day}
+                onToggle={i.taskId ? () => void toggle(i) : undefined}
+                onPress={i.taskId ? () => editor.editItem(i) : undefined}
               />
             ))}
           </View>
         ) : (
-          <Body muted>Dein Tag ist leer.</Body>
+          <View style={{ gap: 12, paddingVertical: 8 }}>
+            <Text style={[type.section, { color: p.ink }]}>Noch nichts geplant</Text>
+            <Body muted>
+              Lege eine Aufgabe an. FOKUS sucht einen freien Platz in deiner Arbeitszeit.
+            </Body>
+            <Button label="Aufgabe anlegen" onPress={() => editor.newTask()} />
+          </View>
         )}
-        {blocks.length && openTasks ? (
-          <Button label="Neu planen" variant="secondary" loading={busy} onPress={plan} />
+
+        {gap ? (
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 12,
+              borderWidth: 1,
+              borderStyle: 'dashed',
+              borderColor: p.ink4,
+              borderRadius: 16,
+              paddingVertical: 10,
+              paddingHorizontal: 14,
+            }}
+          >
+            <View style={{ flex: 1 }}>
+              <Text style={[type.body, { color: p.ink, fontSize: 14 }]}>
+                {clock(gap.start)}–{clock(gap.end)} frei
+              </Text>
+              <Text numberOfLines={2} style={[type.small, { color: p.ink3, fontSize: 12 }]}>
+                {gap.suggestion
+                  ? `Vorschlag: ${gap.suggestion.title} · ${minutesText(gap.suggestion.minutes)}`
+                  : `${minutesText(gap.minutes)} Platz für eine Aufgabe`}
+              </Text>
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={gap.suggestion ? 'Vorschlag einplanen' : 'Aufgabe anlegen'}
+              onPress={async () => {
+                if (!gap.suggestion)
+                  return editor.newTask({ schedule: 'fixed', time: clock(gap.start) });
+                try {
+                  await day.updateTask(gap.suggestion.taskId, {
+                    schedule: 'fixed',
+                    fixedAt: gap.start,
+                  });
+                  undo.notify(`„${gap.suggestion.title}“ um ${clock(gap.start)} eingeplant`);
+                } catch (e) {
+                  setNote((e as Error).message);
+                }
+              }}
+              style={{
+                height: 36,
+                borderRadius: 18,
+                paddingHorizontal: 14,
+                backgroundColor: p.surface2,
+                justifyContent: 'center',
+              }}
+            >
+              <Text style={[type.small, { color: p.ink }]}>
+                {gap.suggestion ? 'Einplanen' : 'Anlegen'}
+              </Text>
+            </Pressable>
+          </View>
         ) : null}
       </View>
 
-      {data.gaps.length ? (
-        <View style={{ gap: 10 }}>
-          <Text accessibilityRole="header" style={[type.section, { color: p.ink, fontSize: 22 }]}>
-            Lücken
-          </Text>
-          {data.gaps.slice(0, 3).map((g) => {
-            const tasks = g.suggestions
-              .map((id) => data.tasks.find((t) => t.id === id))
-              .filter((t): t is NonNullable<typeof t> => !!t);
-            return (
-              <View
-                key={g.startsAt}
-                style={{ backgroundColor: p.surface, borderRadius: 18, padding: 14, gap: 10 }}
-              >
-                <Text style={[type.body, { color: p.ink }]}>
-                  Frei: {g.minutes} Min. ab {clock(g.startsAt)}
-                </Text>
-                {tasks.length ? (
-                  <Chips>
-                    {tasks.map((t) => (
-                      <Chip
-                        key={t.id}
-                        label={`${t.title} · ${t.minutes} Min.`}
-                        onPress={() => void fillGap(g, t.id, t.minutes)}
-                      />
-                    ))}
-                  </Chips>
-                ) : (
-                  <Text style={[type.small, { color: p.ink3 }]}>
-                    Keine passende kleine Aufgabe.
-                  </Text>
-                )}
-              </View>
-            );
-          })}
-        </View>
+      {note || editor.error ? <Body muted>{note || editor.error}</Body> : null}
+      {data.waiting.length ? (
+        <Body muted>
+          {data.waiting.length === 1
+            ? '1 automatische Aufgabe findet in den nächsten Tagen keinen Platz. Verkürze sie oder erweitere deine Arbeitszeit.'
+            : `${data.waiting.length} automatische Aufgaben finden in den nächsten Tagen keinen Platz. Verkürze sie oder erweitere deine Arbeitszeit.`}
+        </Body>
       ) : null}
-
-      <Button label="Social-Slot planen" variant="secondary" onPress={() => setSocial(true)} />
-      <BlockSheet block={open} onClose={() => setOpen(null)} />
-      <SocialSheet open={social} onClose={() => setSocial(false)} />
+      {editor.sheet}
     </Screen>
   );
 }

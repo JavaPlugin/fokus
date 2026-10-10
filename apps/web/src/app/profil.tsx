@@ -32,19 +32,17 @@ import { goBack } from '../components/BackButton';
 import { rememberMe, useMe } from '../components/HeadButtons';
 import { LegalLinks } from '../components/LegalLinks';
 import { NotifySettings } from '../components/NotifySettings';
-import { PlanSettings } from '../components/PlanSettings';
 import { Screen } from '../components/Screen';
 import { api, authClient } from '../lib/api';
 import { endSession } from '../lib/session';
 import { downloadExport } from '../lib/data';
 import { monthName } from '../lib/format';
-import { usePrivacy } from '../lib/privacy';
 import { initials } from '../lib/format';
 import { chooseGlass, chooseLessMotion, chooseScheme } from '../lib/theme';
 import { navigateAfterSheets } from '../lib/nav';
 import { useInstall } from '../lib/install';
 
-type SheetKind = 'notify' | 'plan' | 'look' | 'data' | 'name' | null;
+type SheetKind = 'notify' | 'look' | 'data' | 'name' | null;
 type Prefs = { channel: 'app' | 'email' | 'both' };
 
 const CHANNEL = { app: 'In der App', email: 'Per E-Mail', both: 'App und E-Mail' } as const;
@@ -53,7 +51,6 @@ const SCHEME: Record<SchemeChoice, string> = { system: 'System', light: 'Hell', 
 export default function Profil() {
   const p = usePalette();
   const me = useMe();
-  const privacy = usePrivacy();
   const glassOn = useGlass();
   const lessMotion = useLessMotion();
   const scheme = useSchemeChoice();
@@ -109,24 +106,18 @@ export default function Profil() {
       id: 'plan',
       symbol: 'uhr',
       color: accents.blue.from,
-      title: 'Planung',
-      detail: 'Fokus-Länge, Guthaben, Arbeitstag',
-      keys: 'fokus pause guthaben limit arbeitstag minuten scrollen basis',
-      onPress: () => setSheet('plan'),
+      title: 'Arbeitszeiten',
+      detail: 'Wann FOKUS planen darf, Regeln',
+      keys: 'arbeitszeit plan fokus pause guthaben limit wochentag social',
+      onPress: () => router.push('/arbeitszeiten'),
     },
     {
       id: 'look',
       symbol: 'freizeit',
       color: accents.violet.from,
       title: 'Darstellung',
-      detail: [
-        SCHEME[scheme],
-        glassOn ? 'Glas' : null,
-        privacy.hidden || privacy.auto ? 'Privatmodus' : null,
-      ]
-        .filter(Boolean)
-        .join(' · '),
-      keys: 'hell dunkel design glas bewegung animation verbergen privat',
+      detail: [SCHEME[scheme], glassOn ? 'Glas' : null].filter(Boolean).join(' · '),
+      keys: 'hell dunkel design glas bewegung animation',
       onPress: () => setSheet('look'),
     },
   ];
@@ -358,9 +349,6 @@ export default function Profil() {
       <Sheet open={sheet === 'notify'} onClose={() => setSheet(null)} title="Benachrichtigungen">
         <NotifySettings />
       </Sheet>
-      <Sheet open={sheet === 'plan'} onClose={() => setSheet(null)} title="Planung">
-        {sheet === 'plan' ? <PlanSettings /> : null}
-      </Sheet>
       <Sheet open={sheet === 'look'} onClose={() => setSheet(null)} title="Darstellung">
         <Chips>
           {(Object.keys(SCHEME) as SchemeChoice[]).map((k) => (
@@ -375,14 +363,6 @@ export default function Profil() {
         <Card>
           <Toggle label="Glas-Effekt" value={glassOn} onChange={chooseGlass} />
           <Toggle label="Weniger Bewegung" value={lessMotion} onChange={chooseLessMotion} />
-        </Card>
-        <Card>
-          <Toggle label="Titel verbergen" value={privacy.hidden} onChange={privacy.toggle} />
-          <Toggle
-            label="Beim Öffnen automatisch verbergen"
-            value={privacy.auto}
-            onChange={privacy.setAuto}
-          />
         </Card>
       </Sheet>
       <Sheet open={sheet === 'data'} onClose={() => setSheet(null)} title="Daten">

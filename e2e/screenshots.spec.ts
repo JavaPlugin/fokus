@@ -16,26 +16,41 @@ async function shot(page: Page, name: string, scheme: 'dark' | 'light') {
 
 test('Beispieldaten und Screenshots', async ({ page, request, browser }) => {
   const day = todayIn();
-  await request.put('/api/plan/settings', { data: { workStart: '00:00', workEnd: '23:55' } });
-  await request.post('/api/e2e/credit', { data: { minutes: 35 } });
-  const at = (hhmm: string) => new Date(instant(day, hhmm)).toISOString();
-  const block = (kind: string, hhmm: string, minutes: number, title: string, status = 'planned') =>
-    request
-      .post('/api/blocks', { data: { kind, startsAt: at(hhmm), minutes, title } })
-      .then(async (r) => {
-        const b = (await r.json()) as { id: string };
-        if (status !== 'planned') await request.put(`/api/blocks/${b.id}`, { data: { status } });
-      });
-  // Beispiel-Tag (Zeiten fest, damit die Bilder ruhig aussehen)
-  await block('focus', '09:00', 50, 'Mails & Planung', 'done');
-  await block('focus', '14:00', 50, 'Angebot fertig schreiben');
-  await block('pause', '16:00', 20, 'Spaziergang');
-  await block('social', '18:00', 20, 'Social-Slot');
-  await request.post('/api/inbox', { data: { text: 'Lena wegen Samstag antworten' } });
-  await request.post('/api/inbox', { data: { text: 'Zahnarzttermin ausmachen' } });
-  await request.post('/api/tasks', {
-    data: { title: 'Steuerunterlagen sortieren', minutes: 50, heavy: true },
+  await request.put('/api/plan/settings', {
+    data: { week: Array.from({ length: 7 }, () => ({ from: '09:00', to: '17:00' })) },
   });
+  await request.post('/api/e2e/credit', { data: { minutes: 15 } });
+  const at = (hhmm: string) => new Date(instant(day, hhmm)).toISOString();
+  const task = (data: object) => request.post('/api/tasks', { data });
+  // Beispiel-Tag (feste Zeiten, damit die Bilder ruhig aussehen)
+  const mails = (await (
+    await task({
+      title: 'Mails beantworten',
+      schedule: 'fixed',
+      fixedAt: at('09:00'),
+      minutes: 30,
+      recurrence: { freq: 'daily' },
+    })
+  ).json()) as { id: string };
+  await request.post(`/api/tasks/${mails.id}/done`, { data: { day } });
+  await task({ title: 'Angebot schreiben', schedule: 'fixed', fixedAt: at('14:00'), minutes: 50 });
+  await task({
+    title: 'Spaziergang',
+    kind: 'pause',
+    schedule: 'fixed',
+    fixedAt: at('15:00'),
+    minutes: 20,
+  });
+  await task({
+    title: 'Social-Slot',
+    kind: 'social',
+    schedule: 'fixed',
+    fixedAt: at('18:00'),
+    minutes: 15,
+    recurrence: { freq: 'daily' },
+  });
+  await task({ title: 'Steuererklärung anfangen', minutes: 90 });
+  await task({ title: 'Rechnung abheften', minutes: 15 });
   void addDays;
 
   for (const scheme of ['dark', 'light'] as const) {
@@ -48,10 +63,13 @@ test('Beispieldaten und Screenshots', async ({ page, request, browser }) => {
     await expect(page.getByText('Vom Scrollen zurückgeholt')).toBeVisible();
     await page.waitForTimeout(300);
     await shot(page, 'woche', scheme);
-    await page.goto('/inbox');
-    await expect(page.getByText('Notizen')).toBeVisible();
+    await page.goto('/aufgaben');
+    await expect(page.getByText('Noch ohne Zeit')).toBeVisible();
     await page.waitForTimeout(300);
-    await shot(page, 'inbox', scheme);
+    await shot(page, 'aufgaben', scheme);
+    await page.goto('/arbeitszeiten');
+    await expect(page.getByText('Regeln')).toBeVisible();
+    await shot(page, 'arbeitszeiten', scheme);
     await page.goto('/umleiten?app=instagram');
     await expect(page.getByText('Kurz was Kleines zuerst?')).toBeVisible();
     await page.waitForTimeout(300);
@@ -65,11 +83,12 @@ test('Beispieldaten und Screenshots', async ({ page, request, browser }) => {
   }
 
   // Fokus-Modus: laufender Block, ruhig (ein Durchgang, danach beendet)
-  await request.post('/api/tasks', { data: { title: 'Angebot fertig schreiben', minutes: 50 } });
-  const tasks = (await (await request.get('/api/tasks')).json()) as { id: string; title: string }[];
-  const run = await request.post('/api/focus/start', {
-    data: { taskId: tasks.find((t) => t.title === 'Angebot fertig schreiben')!.id },
-  });
+  const focusTask = (await (
+    await request.post('/api/tasks', {
+      data: { title: 'Angebot fertig schreiben', schedule: 'auto', minutes: 50 },
+    })
+  ).json()) as { id: string };
+  const run = await request.post('/api/focus/start', { data: { taskId: focusTask.id } });
   const session = (await run.json()) as { id: string };
   for (const scheme of ['dark', 'light'] as const) {
     await page.emulateMedia({ colorScheme: scheme });

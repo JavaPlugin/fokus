@@ -1,7 +1,8 @@
-// Gemeinsamer Stand des Tages für Heute, Fokus und Inbox: Blöcke, Aufgaben, Guthaben, laufender
-// Fokus-Durchgang und Notizen. Eine Quelle, damit alle Tabs dasselbe zeigen. Geladen wird erst,
-// wenn eine Seite `reload()` ruft (nach der Anmeldung), danach jede Minute und beim Zurückkehren.
-import { todayIn, type CreditSummary, type PlanSettings } from '@fokus/core';
+// Gemeinsamer Stand für Heute, Aufgaben und Fokus: der Tagesplan (vom Server berechnet), Guthaben
+// und der laufende Fokus-Durchgang. Jede Änderung lädt den Stand neu (`version` zählt hoch, damit
+// Listen sich aktualisieren). Geladen wird erst, wenn eine Seite `reload()` ruft (nach der
+// Anmeldung), danach jede Minute und beim Zurückkehren in die App.
+import { todayIn, type CreditSummary, type PlanSettings, type Recurrence } from '@fokus/core';
 import {
   createContext,
   useCallback,
@@ -15,84 +16,100 @@ import {
 import { Platform } from 'react-native';
 import { api } from './api';
 
-export type Block = {
-  id: string;
-  kind: 'focus' | 'pause' | 'social' | 'event';
-  startsAt: string;
-  minutes: number;
-  title: string;
-  taskId: string | null;
-  status: 'planned' | 'running' | 'done' | 'skipped';
-  source: 'plan' | 'manual' | 'calendar';
-};
+export type Kind = 'work' | 'pause' | 'social';
+export type Schedule = 'auto' | 'fixed' | 'later';
+
 export type Task = {
   id: string;
   title: string;
+  kind: Kind;
   minutes: number;
-  heavy: boolean;
-  mini: boolean;
+  schedule: Schedule;
+  fixedAt: string | null;
   due: string | null;
+  recurrence: Recurrence | null;
+  anchor: string;
   status: 'open' | 'done';
-  note: string;
+  doneAt: string | null;
 };
+
+/** Eine Zeile im Tagesplan (Aufgabe an einem Tag oder Kalender-Termin). */
+export type Item = {
+  key: string;
+  taskId: string | null;
+  day: string;
+  title: string;
+  kind: Kind | 'event';
+  start: string;
+  minutes: number;
+  how: 'auto' | 'fixed' | 'event';
+  recurring: string;
+  done: boolean;
+  doneAt: string | null;
+  changed: boolean;
+};
+
+export type Gap = {
+  start: string;
+  end: string;
+  minutes: number;
+  suggestion: { taskId: string; title: string; minutes: number } | null;
+};
+
 export type Running = {
   id: string;
-  blockId: string | null;
   taskId: string | null;
+  day: string;
   startedAt: string;
   plannedMinutes: number;
 };
-export type Gap = { startsAt: string; minutes: number; suggestions: string[] };
+
 export type DayData = {
   day: string;
+  hours: { from: string; to: string } | null;
   settings: PlanSettings;
-  energy: 'low' | 'normal' | 'high' | null;
-  blocks: Block[];
-  tasks: Task[];
+  items: Item[];
+  gaps: Gap[];
+  waiting: Task[];
   credit: CreditSummary;
   focusMinutes: number;
   running: Running | null;
-  gaps: Gap[];
 };
-export type Note = { id: string; text: string; createdAt: string };
 
-export type NewTask = {
+/** Eingabe beim Anlegen und Ändern einer Aufgabe. */
+export type TaskInput = {
   title: string;
-  minutes?: number;
-  heavy?: boolean;
-  mini?: boolean;
-  due?: string | null;
+  kind: Kind;
+  minutes: number;
+  schedule: Schedule;
+  fixedAt: string | null;
+  recurrence: Recurrence | null;
 };
 
 interface DayApi {
   data: DayData | null;
-  notes: Note[] | null;
   error: string;
-  /** Neu laden (still, wenn schon Daten da sind) */
+  /** Zählt bei jeder Änderung hoch: Listen laden dann neu. */
+  version: number;
   reload: () => Promise<void>;
-  addNote: (text: string) => Promise<void>;
-  removeNote: (id: string) => Promise<void>;
-  /** Notiz wird zur Aufgabe */
-  planNote: (id: string, fields: Partial<NewTask>) => Promise<void>;
-  addTask: (t: NewTask) => Promise<Task>;
-  setTaskDone: (id: string, done: boolean) => Promise<void>;
-  removeTask: (id: string) => Promise<void>;
-  planToday: () => Promise<{ unplaced: { title: string; minutes: number }[] }>;
-  startFocus: (opts: { blockId?: string; taskId?: string; minutes?: number }) => Promise<Running>;
+  createTask: (t: Partial<TaskInput> & { title: string }) => Promise<Task>;
+  updateTask: (id: string, t: Partial<TaskInput>) => Promise<void>;
+  /** Nur ein Vorkommen einer Wiederholung ändern oder überspringen */
+  updateOccurrence: (
+    id: string,
+    day: string,
+    p: { title?: string; minutes?: number; time?: string | null; skipped?: boolean },
+  ) => Promise<void>;
+  deleteTask: (id: string) => Promise<void>;
+  setDone: (taskId: string, day: string, done: boolean) => Promise<void>;
+  startFocus: (opts: { taskId?: string; minutes?: number }) => Promise<Running>;
   finishFocus: (
     id: string,
     opts: { taskDone?: boolean },
   ) => Promise<{ focusedMinutes: number; earned: number }>;
-  setBlockStatus: (id: string, status: Block['status']) => Promise<void>;
-  removeBlock: (id: string) => Promise<void>;
-  /** Energie heute setzen (und neu planen, wenn schon geplant war) */
-  setEnergy: (level: 'low' | 'normal' | 'high') => Promise<void>;
-  /** Freie Lücke mit einer Aufgabe füllen */
-  fillGap: (gap: Gap, taskId: string, minutes: number) => Promise<void>;
   spend: (
     minutes: number,
     reason: 'social' | 'redirect',
-    blockId?: string,
   ) => Promise<{ granted: number; short: number }>;
 }
 
@@ -108,8 +125,8 @@ const web = Platform.OS === 'web' && typeof document !== 'undefined';
 
 export function DayProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState<DayData | null>(null);
-  const [notes, setNotes] = useState<Note[] | null>(null);
   const [error, setError] = useState('');
+  const [version, setVersion] = useState(0);
   const started = useRef(false);
   const lastSync = useRef(0);
 
@@ -121,12 +138,8 @@ export function DayProvider({ children }: { children: ReactNode }) {
         lastSync.current = Date.now();
         await api('/api/calendar/sync', { method: 'POST', body: {} }).catch(() => undefined);
       }
-      const [d, n] = await Promise.all([
-        api<DayData>(`/api/day/${todayIn()}`),
-        api<Note[]>('/api/inbox'),
-      ]);
-      setData(d);
-      setNotes(n);
+      setData(await api<DayData>(`/api/day/${todayIn()}`));
+      setVersion((v) => v + 1);
       setError('');
     } catch (e) {
       setError((e as Error).message);
@@ -153,23 +166,16 @@ export function DayProvider({ children }: { children: ReactNode }) {
     };
     return {
       data,
-      notes,
       error,
+      version,
       reload,
-      addNote: (text) => then(api('/api/inbox', { body: { text } })),
-      removeNote: (id) => then(api(`/api/inbox/${id}`, { method: 'DELETE' })),
-      planNote: (id, fields) => then(api(`/api/inbox/${id}/plan`, { body: fields })),
-      addTask: (t) => then(api<Task>('/api/tasks', { body: t })),
-      setTaskDone: (id, done) =>
-        then(api(`/api/tasks/${id}/${done ? 'done' : 'reopen'}`, { method: 'POST', body: {} })),
-      removeTask: (id) => then(api(`/api/tasks/${id}`, { method: 'DELETE' })),
-      planToday: () =>
-        then(
-          api<{ unplaced: { title: string; minutes: number }[] }>(`/api/plan/${todayIn()}`, {
-            method: 'POST',
-            body: {},
-          }),
-        ),
+      createTask: (t) => then(api<Task>('/api/tasks', { body: t })),
+      updateTask: (id, t) => then(api(`/api/tasks/${id}`, { method: 'PUT', body: t })),
+      updateOccurrence: (id, day, p) =>
+        then(api(`/api/tasks/${id}/occurrence/${day}`, { method: 'PUT', body: p })),
+      deleteTask: (id) => then(api(`/api/tasks/${id}`, { method: 'DELETE' })),
+      setDone: (taskId, day, done) =>
+        then(api(`/api/tasks/${taskId}/${done ? 'done' : 'reopen'}`, { body: { day } })),
       startFocus: (opts) => then(api<Running>('/api/focus/start', { body: opts })),
       finishFocus: (id, opts) =>
         then(
@@ -177,30 +183,14 @@ export function DayProvider({ children }: { children: ReactNode }) {
             body: opts,
           }),
         ),
-      setBlockStatus: (id, status) =>
-        then(api(`/api/blocks/${id}`, { method: 'PUT', body: { status } })),
-      removeBlock: (id) => then(api(`/api/blocks/${id}`, { method: 'DELETE' })),
-      setEnergy: async (level) => {
-        await api(`/api/energy/${todayIn()}`, { method: 'PUT', body: { level } });
-        // War heute schon geplant, passt FOKUS den Plan an die Energie an
-        if (data?.blocks.some((b) => b.source === 'plan' && b.status === 'planned'))
-          await api(`/api/plan/${todayIn()}`, { method: 'POST', body: {} }).catch(() => undefined);
-        await reload();
-      },
-      fillGap: (gap, taskId, minutes) =>
-        then(
-          api('/api/blocks', {
-            body: { kind: 'focus', startsAt: gap.startsAt, minutes, taskId, title: '' },
-          }),
-        ),
-      spend: (minutes, reason, blockId) =>
+      spend: (minutes, reason) =>
         then(
           api<{ granted: number; short: number }>('/api/credit/spend', {
-            body: { minutes, reason, blockId },
+            body: { minutes, reason },
           }),
         ),
     };
-  }, [data, notes, error, reload]);
+  }, [data, error, version, reload]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

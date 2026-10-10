@@ -13,14 +13,14 @@ Die App läuft, ist aber schwer zu verstehen. Überarbeite sie nach den neuen Sc
 
 Es gibt keine Notizen und keine Inbox mehr, nur **Aufgaben**. Felder:
 
-| Feld | Werte |
-| --- | --- |
-| Titel | Text |
-| Art | Arbeit (blau) · Pause (grün) · Social (violett) |
-| Dauer | 15 Min · 30 Min · 1 Std · 2 Std · eigene |
-| Wann | **Automatisch** (FOKUS plant in die Arbeitszeit) · **Feste Zeit** (Tag + Uhrzeit) · **Später** (noch ohne Zeit) |
-| Wiederholen | Nie · Täglich · Werktags · Wöchentlich (Wochentage wählbar) |
-| Status | offen · erledigt (mit Zeitpunkt) |
+| Feld        | Werte                                                                                                           |
+| ----------- | --------------------------------------------------------------------------------------------------------------- |
+| Titel       | Text                                                                                                            |
+| Art         | Arbeit (blau) · Pause (grün) · Social (violett)                                                                 |
+| Dauer       | 15 Min · 30 Min · 1 Std · 2 Std · eigene                                                                        |
+| Wann        | **Automatisch** (FOKUS plant in die Arbeitszeit) · **Feste Zeit** (Tag + Uhrzeit) · **Später** (noch ohne Zeit) |
+| Wiederholen | Nie · Täglich · Werktags · Wöchentlich (Wochentage wählbar)                                                     |
+| Status      | offen · erledigt (mit Zeitpunkt)                                                                                |
 
 - Wiederkehrende Aufgaben: eine Regel (`recurrence`), daraus entstehen Vorkommen pro Tag. Erledigt wird nur das Vorkommen, nicht die Regel. Bearbeiten fragt: „Nur diese“ oder „Alle“.
 - Bestehende Inbox-Einträge per Migration zu Aufgaben mit „Später“, 30 Min, Art Arbeit.
@@ -28,6 +28,7 @@ Es gibt keine Notizen und keine Inbox mehr, nur **Aufgaben**. Felder:
 ## Arbeitszeiten
 
 Neue Seite **Arbeitszeiten** (erreichbar über Avatar → Profil, siehe `design/4-arbeitszeiten.html`):
+
 - Pro Wochentag an/aus + Beginn/Ende. Standard Mo–Fr 09:00–17:00.
 - Dazu die Regeln: Fokus-Block-Länge + Pause, Guthaben pro Fokus-Stunde, Social-Slot (Uhrzeit, Dauer).
 - Der Planer (`packages/core/src/plan.ts`) legt **automatische** Aufgaben nur in Arbeitszeit und um feste Termine herum. Feste Zeiten gehen immer, auch außerhalb.
@@ -36,6 +37,7 @@ Neue Seite **Arbeitszeiten** (erreichbar über Avatar → Profil, siehe `design/
 ## Screens
 
 **Heute** (`design/1-heute.html`)
+
 - Kopf: Datum links, Avatar rechts. **Kein Auge.**
 - Hero: Scroll-Guthaben + **eine Zeile Erklärung** („Je 1 Std. Fokus bekommst du 15 Min. für Social Media.“).
 - Karte „Als Nächstes“: nächste Aufgabe mit Uhrzeit, Dauer, Guthaben-Gewinn, Knopf **Start** → Fokus-Modus.
@@ -45,12 +47,14 @@ Neue Seite **Arbeitszeiten** (erreichbar über Avatar → Profil, siehe `design/
 - Leerer Tag: „Noch nichts geplant“ + Knopf „Aufgabe anlegen“.
 
 **Aufgaben** (statt Inbox, `design/2-aufgaben.html`)
+
 - Umschalter: Offen · Wiederkehrend · Erledigt.
 - Offen gruppiert: „Heute eingeplant“, „Noch ohne Zeit“ (mit Knopf „Einplanen“ → automatisch), später „Diese Woche“.
 - Kreis = erledigt (Toast „… erledigt · Rückgängig“, 5 s, wie `lib/undo.tsx`). Antippen = Bearbeiten-Sheet. Löschen nur im Bearbeiten-Sheet oder per Wischen nach links (`SwipeRow`), immer mit Rückgängig.
 - Hinweiszeile unten: „Kreis antippen = erledigt. Aufgabe antippen = bearbeiten.“
 
 **Neue Aufgabe / Bearbeiten** (`design/3-neue-aufgabe.html`)
+
 - Ein `Sheet` wie in Kontoblick, gleich für Anlegen und Bearbeiten. Reihenfolge: Was? · Art · Wie lange? · Wann? (bei „Feste Zeit“ Tag + Uhrzeit mit den Pickern aus `packages/ui/src/dates.tsx`) · Wiederholen (bei „Wöchentlich“ Wochentage).
 - Erklärung unter „Wann?“: „Automatisch = FOKUS sucht einen freien Platz in deiner Arbeitszeit.“
 - Schnell erfassen (Plus lange drücken / ⌘K) darf bleiben: legt eine Aufgabe „Später, 30 Min“ an.

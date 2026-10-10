@@ -17,7 +17,7 @@ type Boot = Awaited<ReturnType<typeof bootState>> | { kind: 'error'; message: st
 /** Titel der Tabs (alle Tab-Seiten liegen nebeneinander, daher hier nach Adresse). */
 function tabTitle(path: string) {
   if (path.startsWith('/woche')) return 'Woche';
-  if (path.startsWith('/inbox')) return 'Inbox';
+  if (path.startsWith('/aufgaben')) return 'Aufgaben';
   if (path.startsWith('/fokus')) return 'Fokus';
   return 'Heute';
 }
@@ -101,8 +101,8 @@ function TabsContent() {
       <InTabs.Provider value>
         <Tabs screenOptions={{ headerShown: false }} tabBar={(props) => <TabBar {...props} />}>
           <Tabs.Screen name="index" options={{ title: 'Heute' }} />
+          <Tabs.Screen name="aufgaben" options={{ title: 'Aufgaben' }} />
           <Tabs.Screen name="woche" options={{ title: 'Woche' }} />
-          <Tabs.Screen name="inbox" options={{ title: 'Inbox' }} />
           <Tabs.Screen name="fokus" options={{ title: 'Fokus' }} />
         </Tabs>
       </InTabs.Provider>

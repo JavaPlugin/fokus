@@ -128,6 +128,15 @@ export function registerTaskRoutes(app: Hono<Vars>, { db }: { db: Db }) {
     return c.json({ error: 'Unbekannte Ansicht.' }, 400);
   });
 
+  app.get('/api/tasks/:id', async (c) => {
+    const u = authed(c);
+    if (u instanceof Response) return u;
+    const id = idOf(c.req.param('id'));
+    if (!id) return notFound(c);
+    const [row] = await withUser(db, u.id, (tx) => tx.select().from(task).where(eq(task.id, id)));
+    return row ? c.json(taskOut(row)) : notFound(c);
+  });
+
   // ---------- Anlegen und ändern ----------
 
   app.post('/api/tasks', async (c) => {

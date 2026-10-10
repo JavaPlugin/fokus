@@ -2,6 +2,15 @@
 
 Alle Versionen von FOKUS. Installiert wird über Admin-Panel → System (Tag `vX.Y.Z` auf `main`).
 
+## 1.1.0 – Einfacher und verständlicher
+
+- **Eine Sache: die Aufgabe.** Art (Arbeit, Pause, Social), Dauer, Wann (automatisch, feste Zeit, später) und Wiederholung (täglich, werktags, wöchentlich). Notizen und Inbox entfallen, Notizen werden zu Aufgaben „Später“.
+- **Arbeitszeiten** pro Wochentag (Standard Mo–Fr 09:00–17:00). FOKUS plant automatische Aufgaben nur dort und um feste Zeiten herum, automatisch bei jeder Änderung.
+- **Heute** neu: Guthaben mit Erklärung, „Als Nächstes“ mit Start, Liste mit Kreis zum Erledigen (mit Rückgängig), freie Zeit mit Vorschlag und „Einplanen“.
+- **Aufgaben** statt Inbox: Offen, Wiederkehrend, Erledigt. Antippen bearbeitet, nichts verschwindet durch Antippen. Löschen nur im Sheet oder per Wischen, immer mit Rückgängig.
+- Wiederkehrende Aufgaben: erledigen und ändern geht pro Tag („Nur diese“ oder „Alle“).
+- Privatmodus (Auge) und Energie-Abfrage entfernt. Einführung in drei Schritten.
+
 ## 1.0.0 – 10. Oktober 2026
 
 Erster Stand von FOKUS: Tagesplaner, der Social Media einplant. Produktive Zeit verdient Scroll-Zeit. Details je Phase unten.

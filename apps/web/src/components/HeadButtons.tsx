@@ -1,10 +1,9 @@
-// Runde Knöpfe rechts in der Glas-Kopfzeile: Auge (Privatmodus) und Avatar → Profil.
-import { EyeIcon, font, type, usePalette } from '@fokus/ui';
+// Runder Avatar rechts in der Kopfzeile → Profil.
+import { font, type, usePalette } from '@fokus/ui';
 import { router } from 'expo-router';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { api, type Me } from '../lib/api';
-import { usePrivacy } from '../lib/privacy';
 import { initials } from '../lib/format';
 
 let cached: Me | null = null;
@@ -67,16 +66,9 @@ export function HeadButton({
 export function HeadButtons({ children }: { children?: ReactNode }) {
   const p = usePalette();
   const me = useMe();
-  const privacy = usePrivacy();
   return (
     <View style={{ flexDirection: 'row', gap: 8 }}>
       {children}
-      <HeadButton
-        label={privacy.hidden ? 'Inhalte zeigen' : 'Inhalte verbergen'}
-        onPress={privacy.toggle}
-      >
-        <EyeIcon hidden={privacy.hidden} color={p.ink} />
-      </HeadButton>
       <HeadButton label="Profil" onPress={() => router.push('/profil')} light>
         <Text style={[type.small, { color: p.bg, fontFamily: font.semibold }]}>
           {me ? initials(me.name || me.email) : '·'}

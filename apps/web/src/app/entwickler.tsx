@@ -20,7 +20,7 @@ type Key = {
 };
 
 const SCOPE_LABEL: Record<string, string> = {
-  'inbox:create': 'Notizen in die Inbox legen',
+  'inbox:create': 'Aufgaben „Später“ anlegen',
 };
 
 export default function Entwickler() {
@@ -64,7 +64,7 @@ export default function Entwickler() {
       <BackButton parent="/profil" label="Profil" />
       <Title>Entwickler</Title>
       <Body muted>
-        Mit einem persönlichen Schlüssel legen Kurzbefehle und Siri Notizen direkt in deine Inbox.
+        Mit einem persönlichen Schlüssel legen Kurzbefehle und Siri Aufgaben („Später“, 30 Min.) an.
         Der Schlüssel ist nur einmal sichtbar.
       </Body>
 
@@ -121,14 +121,14 @@ export default function Entwickler() {
         ) : null}
       </Section>
 
-      <Section title="Kurzbefehl „Notiz“">
-        <Body muted>Für Siri („Notiz an FOKUS“) und den Action-Button.</Body>
+      <Section title="Kurzbefehl „Aufgabe“">
+        <Body muted>Für Siri („Aufgabe an FOKUS“) und den Action-Button.</Body>
         <Body>
           1. Kurzbefehle-App → „+“ → Aktion „Nach Eingabe fragen“ (Text, Frage: „Was fällt dir
           ein?“).{'\n'}2. Aktion „Inhalte von URL abrufen“: URL unten, Methode POST, Header
           „Authorization“ = „Bearer “ + dein Schlüssel, Anfragetext JSON mit Feld „text“ =
-          Angegebene Eingabe.{'\n'}3. Kurzbefehl „Notiz an FOKUS“ nennen. Die Notiz landet in der
-          Inbox, FOKUS plant sie später ein.
+          Angegebene Eingabe.{'\n'}3. Kurzbefehl „Aufgabe an FOKUS“ nennen. Die Aufgabe steht unter
+          „Aufgaben“ → „Noch ohne Zeit“, dort planst du sie ein.
         </Body>
         <CopyBox label="URL" value={url} />
       </Section>

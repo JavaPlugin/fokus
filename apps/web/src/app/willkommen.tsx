@@ -217,7 +217,7 @@ export default function Willkommen() {
       {section(
         eyebrow('Tagesplan', goalPalettes.blue.text),
         'FOKUS verteilt deine Aufgaben.',
-        'Aufgaben rein, freie Zeitblöcke raus. Schweres in deinen Hochphasen, Kleines in die Lücken.',
+        'Aufgaben rein, Uhrzeiten raus. FOKUS plant in deine Arbeitszeit und um feste Termine herum.',
         card(
           <>
             {[

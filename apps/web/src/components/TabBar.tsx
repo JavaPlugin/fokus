@@ -12,7 +12,7 @@ type BottomTabBarProps = Parameters<NonNullable<ComponentProps<typeof Tabs>['tab
 const ICON: Record<string, TabIconName> = {
   index: 'heute',
   woche: 'woche',
-  inbox: 'inbox',
+  aufgaben: 'inbox',
   fokus: 'fokus',
 };
 
@@ -23,7 +23,7 @@ export const TAB_BAR_SPACE = 64 + 12 + 16;
 export function TabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const p = usePalette();
   const insets = useSafeAreaInsets();
-  const { setCaptureOpen, plusRef } = useApp();
+  const { setCaptureOpen, setQuickOpen, plusRef } = useApp();
   const pos = usePagerPos();
   const [w, setW] = useState(0);
   const n = state.routes.length;
@@ -66,8 +66,11 @@ export function TabBar({ state, descriptors, navigation }: BottomTabBarProps) {
       <Pressable
         ref={plusRef as never}
         accessibilityRole="button"
-        accessibilityLabel="Notiz oder Aufgabe erfassen"
+        accessibilityLabel="Neue Aufgabe"
+        accessibilityHint="Lang drücken: schnell eine Aufgabe notieren"
         onPress={() => setCaptureOpen(true)}
+        onLongPress={() => setQuickOpen(true)}
+        delayLongPress={350}
         style={{
           width: 52,
           height: 52,

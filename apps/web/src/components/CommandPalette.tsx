@@ -1,12 +1,12 @@
 // Desktop: ⌘K / Strg+K Befehlspalette (Erfassen, Seite wechseln) und Tastenkürzel:
-// N neue Notiz, 1–4 Seiten. Nie in Eingabefeldern, nur im Web.
+// N neue Aufgabe, 1–4 Seiten. Nie in Eingabefeldern, nur im Web.
 import { afterSheets, font, glass, type, useBackClose, usePalette } from '@fokus/ui';
 import { router } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Modal, Platform, Pressable, Text, TextInput, View } from 'react-native';
 import { useApp } from '../lib/app';
 
-const TABS = ['/', '/woche', '/inbox', '/fokus'] as const;
+const TABS = ['/', '/aufgaben', '/woche', '/fokus'] as const;
 
 const typing = (t: EventTarget | null) => {
   const el = t as HTMLElement | null;
@@ -17,7 +17,7 @@ type Cmd = { id: string; label: string; hint?: string; run: () => void };
 
 export function CommandPalette() {
   const p = usePalette();
-  const { setCaptureOpen } = useApp();
+  const { setCaptureOpen, setQuickOpen } = useApp();
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
   const [sel, setSel] = useState(0);
@@ -58,10 +58,12 @@ export function CommandPalette() {
   useBackClose(open, close);
   const commands: Cmd[] = useMemo(
     () => [
-      { id: 'new', label: 'Neue Notiz', hint: 'N', run: () => setCaptureOpen(true) },
+      { id: 'new', label: 'Neue Aufgabe', hint: 'N', run: () => setCaptureOpen(true) },
       { id: 't1', label: 'Heute', hint: '1', run: () => router.navigate('/') },
-      { id: 't2', label: 'Woche', hint: '2', run: () => router.navigate('/woche') },
-      { id: 't3', label: 'Inbox', hint: '3', run: () => router.navigate('/inbox') },
+      { id: 't2', label: 'Aufgaben', hint: '2', run: () => router.navigate('/aufgaben') },
+      { id: 't3', label: 'Woche', hint: '3', run: () => router.navigate('/woche') },
+      { id: 'quick', label: 'Schnell notieren', run: () => setQuickOpen(true) },
+      { id: 'hours', label: 'Arbeitszeiten', run: () => router.navigate('/arbeitszeiten') },
       { id: 't4', label: 'Fokus', hint: '4', run: () => router.navigate('/fokus') },
       { id: 'set', label: 'Profil und Einstellungen', run: () => router.navigate('/profil') },
       {
@@ -70,7 +72,7 @@ export function CommandPalette() {
         run: () => router.navigate('/entwickler'),
       },
     ],
-    [setCaptureOpen],
+    [setCaptureOpen, setQuickOpen],
   );
 
   const items: Cmd[] = useMemo(() => {

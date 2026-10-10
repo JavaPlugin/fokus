@@ -4,9 +4,11 @@
 import {
   Body,
   Button,
+  Chip,
+  Chips,
+  Field,
   HeroCard,
   Notice,
-  font,
   kindColors,
   type,
   usePalette,
@@ -14,21 +16,15 @@ import {
 } from '@fokus/ui';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Animated, Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { Animated, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { api } from '../lib/api';
-import { enablePush, type PushState } from '../lib/push';
 import { PageHead } from '../components/PageHead';
 import { InstallGuide } from '../components/InstallGuide';
 import { RedirectGuide } from '../components/RedirectGuide';
 import { goBack } from '../components/BackButton';
-import { isStandalone } from '../lib/install';
 
-const STEPS = 4;
-/** Schritt „Zum Home-Bildschirm“ (früh, gleich nach der Begrüßung). */
-const INSTALL_STEP = 1;
-/** Schritt „Umleiten einrichten“. */
-const REDIRECT_STEP = 2;
+const STEPS = 3;
 
 export default function Einfuehrung() {
   return (
@@ -46,7 +42,7 @@ function EinfuehrungInhalt() {
   const again = wieder === '1';
   const installOnly = schritt === 'install';
   const redirectOnly = schritt === 'umleiten';
-  const [step, setStep] = useState(installOnly ? INSTALL_STEP : redirectOnly ? REDIRECT_STEP : 0);
+  const [step, setStep] = useState(0);
   const [loaded, setLoaded] = useState(again);
   const fade = useRef(new Animated.Value(1)).current;
   const reduced = useReducedMotion();
@@ -72,8 +68,7 @@ function EinfuehrungInhalt() {
 
   async function go(target: number) {
     if (installOnly || redirectOnly) return close();
-    // Schon installiert (Home-Bildschirm): Anleitung überspringen
-    const next = target === INSTALL_STEP && isStandalone() ? target + 1 : target;
+    const next = target;
     if (next >= STEPS) return finish();
     await progress(next).catch(() => undefined);
     if (reduced) return setStep(next);
@@ -87,10 +82,15 @@ function EinfuehrungInhalt() {
 
   const screens: ReactNode[] = [
     <Welcome key="w" onNext={() => go(1)} />,
-    <InstallStep key="i" onNext={() => go(INSTALL_STEP + 1)} />,
-    <RedirectStep key="r" onNext={() => go(REDIRECT_STEP + 1)} />,
-    <Finish key="s" onDone={finish} />,
+    <HoursStep key="h" onNext={() => go(2)} />,
+    <FirstTask key="t" onDone={finish} />,
   ];
+  // Aus dem Profil: nur der gewünschte Schritt
+  const only = installOnly ? (
+    <InstallStep onNext={close} />
+  ) : redirectOnly ? (
+    <RedirectStep onNext={close} />
+  ) : null;
 
   return (
     <View style={{ flex: 1, backgroundColor: p.bg, paddingTop: insets.top + 12 }}>
@@ -139,7 +139,9 @@ function EinfuehrungInhalt() {
           alignSelf: 'center',
         }}
       >
-        <Animated.View style={{ flex: 1, opacity: fade, gap: 16 }}>{screens[step]}</Animated.View>
+        <Animated.View style={{ flex: 1, opacity: fade, gap: 16 }}>
+          {only ?? screens[step]}
+        </Animated.View>
       </ScrollView>
     </View>
   );
@@ -219,7 +221,7 @@ function Welcome({ onNext }: { onNext: () => void }) {
       <View style={{ gap: 16 }}>
         <Heading
           title="Produktive Zeit verdient Scroll-Zeit"
-          text="FOKUS plant Arbeit, Pausen und bewusste Social-Slots. Eine Stunde Fokus bringt dir 15 Minuten Guthaben. Gesperrt wird nichts."
+          text="Je 1 Std. Fokus bekommst du 15 Min. Scroll-Guthaben für Social Media. FOKUS plant deine Aufgaben in deine Arbeitszeit. Gesperrt wird nichts."
         />
         <Button label="Los geht’s" onPress={onNext} />
       </View>
@@ -227,47 +229,105 @@ function Welcome({ onNext }: { onNext: () => void }) {
   );
 }
 
-function Finish({ onDone }: { onDone: () => void }) {
+const DAYS_ON = [1, 2, 3, 4, 5];
+
+/** Schritt 2: Arbeitszeiten für Mo–Fr (Feinheiten später unter Profil → Arbeitszeiten). */
+function HoursStep({ onNext }: { onNext: () => void }) {
   const p = usePalette();
-  const [push, setPush] = useState<PushState | null>(null);
-  const ios =
-    Platform.OS === 'web' &&
-    typeof navigator !== 'undefined' &&
-    /iPhone|iPad/.test(navigator.userAgent);
-  const installed =
-    Platform.OS === 'web' &&
-    typeof window !== 'undefined' &&
-    window.matchMedia?.('(display-mode: standalone)').matches;
+  const [from, setFrom] = useState('09:00');
+  const [to, setTo] = useState('17:00');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  async function save() {
+    setBusy(true);
+    setError('');
+    try {
+      const week = Array.from({ length: 7 }, (_, i) => (DAYS_ON.includes(i) ? { from, to } : null));
+      await api('/api/plan/settings', { method: 'PUT', body: { week } });
+      onNext();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const chips = (values: string[], value: string, set: (v: string) => void) => (
+    <Chips>
+      {values.map((v) => (
+        <Chip key={v} label={`${v} Uhr`} selected={value === v} onPress={() => set(v)} />
+      ))}
+    </Chips>
+  );
   return (
-    <>
-      <Heading
-        title="Fast fertig"
-        text="Eine Sache noch. Danach siehst du auf „Heute“ deinen Tag."
-      />
-      <View style={{ gap: 12, backgroundColor: p.surface, borderRadius: 18, padding: 16 }}>
-        <Text style={[type.body, { color: p.ink, fontFamily: font.semibold }]}>Mitteilungen</Text>
-        <Body muted>Eine Erinnerung vor jedem Fokus-Block und Social-Slot.</Body>
-        {ios && !installed ? (
-          <Notice tone="warning">
-            Auf dem iPhone geht das erst, wenn FOKUS auf dem Home-Bildschirm liegt.
-          </Notice>
-        ) : push === 'on' ? (
-          <Notice tone="positive">Mitteilungen sind an.</Notice>
-        ) : push === 'denied' || push === 'unsupported' ? (
-          <Notice tone="warning">Dieser Browser erlaubt keine Mitteilungen.</Notice>
-        ) : (
-          <Button
-            label="Mitteilungen erlauben"
-            variant="secondary"
-            onPress={() =>
-              void enablePush()
-                .then(setPush)
-                .catch(() => setPush('unsupported'))
-            }
-          />
-        )}
+    <View style={{ flex: 1, justifyContent: 'space-between', gap: 24 }}>
+      <View style={{ gap: 20, paddingTop: 12 }}>
+        <Heading
+          title="Wann arbeitest du?"
+          text="Automatische Aufgaben plant FOKUS nur in diese Zeit, Montag bis Freitag. Aufgaben mit fester Zeit gehen immer. Einzelne Tage änderst du später im Profil."
+        />
+        <View style={{ gap: 10 }}>
+          <Text style={[type.small, { color: p.ink2 }]}>Beginn</Text>
+          {chips(['07:00', '08:00', '09:00', '10:00'], from, setFrom)}
+          <Text style={[type.small, { color: p.ink2, marginTop: 6 }]}>Ende</Text>
+          {chips(['15:00', '16:00', '17:00', '18:00', '19:00'], to, setTo)}
+        </View>
+        {error ? <Notice tone="negative">{error}</Notice> : null}
       </View>
-      <Button label="Zu meinem Tag" onPress={onDone} />
-    </>
+      <Button label="Weiter" loading={busy} disabled={from >= to} onPress={save} />
+    </View>
+  );
+}
+
+/** Schritt 3: die erste Aufgabe (oder überspringen). */
+function FirstTask({ onDone }: { onDone: () => void }) {
+  const [title, setTitle] = useState('');
+  const [minutes, setMinutes] = useState(60);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  async function make() {
+    setBusy(true);
+    setError('');
+    try {
+      await api('/api/tasks', { body: { title: title.trim(), minutes, schedule: 'auto' } });
+      onDone();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <View style={{ flex: 1, justifyContent: 'space-between', gap: 24 }}>
+      <View style={{ gap: 20, paddingTop: 12 }}>
+        <Heading
+          title="Deine erste Aufgabe"
+          text="FOKUS sucht einen freien Platz in deiner Arbeitszeit. Wenn du sie fokussiert erledigst, bekommst du Scroll-Guthaben."
+        />
+        <Field
+          label="Was?"
+          value={title}
+          onChangeText={setTitle}
+          placeholder="z. B. Angebot schreiben"
+        />
+        <Chips>
+          {[15, 30, 60, 120].map((m) => (
+            <Chip
+              key={m}
+              label={m >= 60 ? `${m / 60} Std` : `${m} Min`}
+              selected={minutes === m}
+              onPress={() => setMinutes(m)}
+            />
+          ))}
+        </Chips>
+        {error ? <Notice tone="negative">{error}</Notice> : null}
+      </View>
+      <View style={{ gap: 10 }}>
+        <Button label="Aufgabe anlegen" loading={busy} disabled={!title.trim()} onPress={make} />
+        <Button label="Später" variant="secondary" onPress={onDone} />
+      </View>
+    </View>
   );
 }

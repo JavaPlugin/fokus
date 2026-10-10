@@ -171,8 +171,6 @@ export function BlockRow({
         <View style={{ flex: 1 }}>
           <Text
             numberOfLines={1}
-            // @ts-expect-error dataSet gibt es nur in react-native-web
-            dataSet={{ private: '' }}
             style={[
               type.body,
               {

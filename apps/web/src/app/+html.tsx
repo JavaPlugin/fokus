@@ -61,8 +61,6 @@ body { background-color: ${colors.dark.bg}; }
 [data-glass="bar"] { border: 1px solid rgba(255,255,255,0.06); }
 [data-glass="head"] { border-bottom: 1px solid rgba(255,255,255,0.06); }
 [data-pager] { touch-action: pan-y; }
-/* Privatmodus: Titel unscharf (Elemente mit dataSet private) */
-html.fk-private [data-private] { filter: blur(9px); }
 [data-glass="scrim"] { -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
 [data-glass="overlay"] { background-color: rgba(0,0,0,0.55); -webkit-backdrop-filter: blur(28px) saturate(160%); backdrop-filter: blur(28px) saturate(160%); }
 @supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) { [data-glass="overlay"] { background-color: rgba(0,0,0,0.92); } }

@@ -14,7 +14,7 @@ test('keine CSP-Verstöße auf den Hauptseiten', async ({ page }) => {
       console.error(`Refused to load ${e.blockedURI} (${e.violatedDirective})`),
     ),
   );
-  for (const path of ['/', '/woche', '/inbox', '/fokus', '/willkommen', '/profil']) {
+  for (const path of ['/', '/aufgaben', '/woche', '/fokus', '/willkommen', '/profil']) {
     await page.goto(path);
     await page.waitForLoadState('networkidle');
   }

@@ -60,9 +60,8 @@ export default function FokusModus() {
   }, []);
 
   const run = phase?.kind === 'focus' ? phase.run : null;
-  const task = day.data?.tasks.find((t) => t.id === (run?.taskId ?? ''));
-  const block = day.data?.blocks.find((b) => b.id === run?.blockId);
-  useEffect(() => setTitle(task?.title ?? block?.title ?? ''), [task?.title, block?.title]);
+  const current = day.data?.items.find((i) => i.taskId === run?.taskId && i.day === run?.day);
+  useEffect(() => setTitle(current?.title ?? ''), [current?.title]);
 
   if (error)
     return (
@@ -199,8 +198,6 @@ export default function FokusModus() {
               {phase.kind === 'pause' ? 'Pause' : 'Fokus-Block'}
             </Text>
             <Text
-              // @ts-expect-error dataSet gibt es nur in react-native-web
-              dataSet={{ private: '' }}
               style={[
                 type.section,
                 { color: p.ink, textAlign: 'center', marginTop: 6, fontSize: 22 },

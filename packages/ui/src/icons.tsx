@@ -56,7 +56,7 @@ export function LockIcon({ color, size = 16 }: { color: string; size?: number })
   );
 }
 
-/** Auge (Privatmodus): offen = Beträge sichtbar, durchgestrichen = verborgen. */
+/** Auge. */
 export function EyeIcon({
   hidden,
   color,

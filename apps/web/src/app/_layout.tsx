@@ -13,7 +13,6 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { UpdateBanner } from '../components/UpdateBanner';
 import { AppProvider } from '../lib/app';
 import { DayProvider } from '../lib/day';
-import { PrivacyProvider } from '../lib/privacy';
 import { UndoProvider } from '../lib/undo';
 import { loadDisplay, loadScheme } from '../lib/theme';
 import { initInstall } from '../lib/install';
@@ -47,18 +46,16 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <AppProvider>
         <DayProvider>
-          <PrivacyProvider>
-            <UndoProvider>
-              <StatusBar style="auto" />
-              <View style={{ flex: 1 }}>
-                <ThemeProvider value={theme}>
-                  <Stack screenOptions={{ headerShown: false }} />
-                </ThemeProvider>
-                <AuthGate />
-              </View>
-              <UpdateBanner />
-            </UndoProvider>
-          </PrivacyProvider>
+          <UndoProvider>
+            <StatusBar style="auto" />
+            <View style={{ flex: 1 }}>
+              <ThemeProvider value={theme}>
+                <Stack screenOptions={{ headerShown: false }} />
+              </ThemeProvider>
+              <AuthGate />
+            </View>
+            <UpdateBanner />
+          </UndoProvider>
         </DayProvider>
       </AppProvider>
     </SafeAreaProvider>
