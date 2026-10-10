@@ -1,0 +1,37 @@
+name: Images
+
+# Docker-Builds sind der langsamste Teil. Sie laufen auf main (wärmt den Cache für den
+# Release) und bei PRs nur, wenn sich etwas ändert, das die Images betrifft.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - deploy/**
+      - pnpm-lock.yaml
+      - '**/package.json'
+      - .github/workflows/images.yml
+
+concurrency:
+  group: images-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  images:
+    name: Docker-Images bauen
+    runs-on: ubuntu-latest
+    strategy:
+      matrix: { image: [api, web, updater] }
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/docker/${{ matrix.image }}.Dockerfile
+          push: false
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}

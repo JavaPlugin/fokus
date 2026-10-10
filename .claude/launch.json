@@ -1,0 +1,23 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "api",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@fokus/api", "dev"],
+      "port": 3000
+    },
+    {
+      "name": "web",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@fokus/web", "dev"],
+      "port": 8081
+    },
+    {
+      "name": "updater-mock",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@fokus/updater", "dev:mock"],
+      "port": 8090
+    }
+  ]
+}

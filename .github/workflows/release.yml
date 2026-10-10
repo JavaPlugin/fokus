@@ -1,0 +1,97 @@
+name: Release
+
+# Auslöser: git tag v1.2.3 && git push --tags
+# Tags mit Bindestrich (v1.2.3-test.1, v1.2.3-broken) werden Pre-Releases.
+# „-broken“ baut eine API, die sich absichtlich nie gesund meldet (Test des Rollbacks).
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  # Tests laufen schon in der CI auf main (Tags werden nur dort gesetzt).
+  images:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix: { image: [api, web, updater] }
+    steps:
+      - uses: actions/checkout@v5
+      - name: Signaturschlüssel vorhanden?
+        env: { KEY: '${{ secrets.COSIGN_PRIVATE_KEY }}' }
+        run: |
+          if [ -z "$KEY" ]; then
+            echo "::error::GitHub-Secret COSIGN_PRIVATE_KEY fehlt (Settings → Secrets and variables → Actions)."
+            exit 1
+          fi
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: name
+        run: echo "image=ghcr.io/${GITHUB_REPOSITORY,,}-${{ matrix.image }}" >> "$GITHUB_OUTPUT"
+      - id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/docker/${{ matrix.image }}.Dockerfile
+          push: true
+          # Nur die feste Version, nie "latest".
+          tags: ${{ steps.name.outputs.image }}:${{ github.ref_name }}
+          build-args: |
+            FK_VERSION=${{ github.ref_name }}
+            FK_SELFTEST_BROKEN=${{ contains(github.ref_name, '-broken') && '1' || '' }}
+          labels: org.opencontainers.image.version=${{ github.ref_name }}
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+      - uses: sigstore/cosign-installer@v3
+        with: { cosign-release: 'v2.6.5' } # gleiche Version wie im Updater-Image
+      # Eigener Schlüssel statt keyless: die VM prüft offline mit deploy/cosign.pub,
+      # ohne externe Dienste. Kein Eintrag im öffentlichen Transparenz-Log.
+      - name: Image signieren und prüfen
+        env:
+          KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
+          COSIGN_PASSWORD: ''
+          REF: ${{ steps.name.outputs.image }}@${{ steps.build.outputs.digest }}
+        run: |
+          printf '%s\n' "$KEY" > key.pem
+          cosign import-key-pair --key key.pem --output-key-prefix fk
+          rm key.pem
+          cosign sign --yes --key fk.key --tlog-upload=false "$REF"
+          rm fk.key fk.pub
+          cosign verify --key deploy/cosign.pub --insecure-ignore-tlog=true "$REF" > /dev/null
+          echo "Signatur von $REF passt zu deploy/cosign.pub"
+
+  release:
+    needs: images
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with: { fetch-depth: 0 }
+      - name: Deploy-Paket
+        run: tar -czf fokus-deploy.tar.gz -C deploy compose.yaml backup.sh db/10-app-role.sh install.sh .env.example
+      - name: Changelog aus Conventional Commits
+        run: |
+          prev=$(git describe --tags --abbrev=0 "${GITHUB_REF_NAME}^" 2>/dev/null || true)
+          range=${prev:+$prev..}$GITHUB_REF_NAME
+          # Leere Abschnitte dürfen nicht als Fehler zählen (Actions läuft mit bash -e).
+          section() {
+            local l
+            l=$(git log --no-merges --format='- %s' "$range" | grep -E "^- $2(\(.+\))?!?:" || true)
+            if [ -n "$l" ]; then printf '### %s\n%s\n\n' "$1" "$l"; fi
+          }
+          {
+            section "Neu" feat
+            section "Behoben" fix
+            section "Sonstiges" '(refactor|perf|docs|chore|ci|build|test)'
+          } > CHANGELOG.md
+          cat CHANGELOG.md
+      - uses: softprops/action-gh-release@v2
+        with:
+          body_path: CHANGELOG.md
+          files: fokus-deploy.tar.gz
+          prerelease: ${{ contains(github.ref_name, '-') }}

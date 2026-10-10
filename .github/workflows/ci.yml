@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Lint, Typen, Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with: { node-version: 24, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+
+  migrations:
+    name: Migrationen gegen Postgres 17
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17.11-bookworm
+        env: { POSTGRES_PASSWORD: ci, POSTGRES_DB: fokus }
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-retries 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with: { node-version: 24, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - name: Zweimal migrieren (muss idempotent sein)
+        env: { DATABASE_URL: 'postgres://postgres:ci@localhost:5432/fokus' }
+        run: |
+          pnpm --filter @fokus/db exec tsx scripts/migrate.ts
+          pnpm --filter @fokus/db exec tsx scripts/migrate.ts
+      - name: Schema und Migrationen stimmen überein
+        run: |
+          pnpm --filter @fokus/db generate --name ci-check
+          test -z "$(git status --porcelain packages/db/drizzle)" || (echo "Fehlende Migration" && git status packages/db/drizzle && exit 1)
+
+  caddy:
+    name: Caddyfile prüfen
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: docker run --rm -v "$PWD/deploy/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2.11.6-alpine caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+
+  e2e:
+    name: Browser-Tests (Playwright)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with: { node-version: 24, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - name: Web-App bauen (statischer Export mit Service Worker)
+        run: pnpm --filter @fokus/web build
+      - run: pnpm e2e
+        env: { CI: '1' }
+      - name: Bericht bei Fehlern
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7

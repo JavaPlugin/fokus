@@ -1,0 +1,26 @@
+# Echte Finanzdaten nie ins Repo
+data.json
+fixtures/private/
+*.local
+*.zip
+.env
+.env.*
+!.env.example
+
+node_modules/
+dist/
+.turbo/
+.expo/
+web-build/
+coverage/
+*.log
+.data/
+.DS_Store
+!apps/web/.env.development
+e2e/.auth.json
+playwright-report/
+test-results/
+
+# Schriftdateien (kopiert aus @expo-google-fonts/geist beim Build)
+apps/web/public/fonts/
+*.key

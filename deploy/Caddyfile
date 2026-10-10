@@ -1,0 +1,76 @@
+{
+	admin off
+	# TLS endet am Cloudflare Tunnel. Caddy spricht intern nur HTTP.
+	auto_https off
+	servers {
+		trusted_proxies static private_ranges
+		client_ip_headers Cf-Connecting-Ip X-Forwarded-For
+	}
+}
+
+:80 {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=63072000; includeSubDomains"
+		# Nur eigene Skripte (plus Expos fester Hydrate-Schalter per Hash), keine fremden Quellen.
+		Content-Security-Policy "default-src 'self'; script-src 'self' 'sha256-67fhrP0+BkBqmgGGXTtgiVO/9EQs3QruYNU/7fnRkI8='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy no-referrer
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		-Server
+	}
+
+	# route: Regeln gelten genau in dieser Reihenfolge, die erste passende gewinnt.
+	route {
+		# Fortschritt eines Updates: immer erreichbar, auch im Wartungsmodus.
+		# Enthält nur Schritt, Versionen und Zeit, keine Geheimnisse.
+		handle /maintenance/status.json {
+			root * /maint
+			rewrite * /status.json
+			header Cache-Control no-store
+			file_server
+		}
+
+		# Wartungsmodus: der Updater legt /maint/on an. Dann gibt es für alles die Wartungsseite.
+		@maintenance file {
+			root /maint
+			try_files /on
+		}
+		handle @maintenance {
+			error 503
+		}
+
+		# /health bleibt intern (Updater und Docker sprechen die API direkt an).
+		handle /api/* {
+			reverse_proxy api:3000
+		}
+
+		# Für Suchmaschinen: kommt von der API (kennt die öffentliche Adresse)
+		@seo path /robots.txt /sitemap.xml
+		handle @seo {
+			rewrite * /api/seo{path}
+			reverse_proxy api:3000
+		}
+
+		handle {
+			root * /srv
+			@immutable path /_expo/static/*
+			header @immutable Cache-Control "public, max-age=31536000, immutable"
+			@fresh path /sw.js /index.html /manifest.webmanifest
+			header @fresh Cache-Control "no-cache"
+			try_files {path} {path}.html {path}/index.html /index.html
+			file_server
+		}
+
+	}
+
+	handle_errors 503 {
+		root * /srv
+		rewrite * /maintenance.html
+		header Cache-Control no-store
+		header Retry-After 30
+		file_server
+	}
+}

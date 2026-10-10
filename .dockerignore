@@ -1,0 +1,12 @@
+# Nie Echtdaten oder Secrets ins Image
+data.json
+fixtures/private/
+**/.env
+**/.env.*
+!apps/web/.env.development
+**/.data/
+**/node_modules/
+**/dist/
+**/.expo/
+**/.turbo/
+.git/

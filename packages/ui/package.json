@@ -1,0 +1,24 @@
+{
+  "name": "@fokus/ui",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p .",
+    "test": "vitest run"
+  },
+  "peerDependencies": {
+    "react": "*",
+    "react-native": "*",
+    "react-native-svg": "*"
+  },
+  "dependencies": {
+    "@fokus/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.18"
+  }
+}

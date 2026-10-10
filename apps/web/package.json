@@ -1,0 +1,38 @@
+{
+  "name": "@fokus/web",
+  "version": "0.1.0",
+  "private": true,
+  "main": "expo-router/entry",
+  "scripts": {
+    "dev": "expo start --web --port 8081",
+    "build": "node scripts/fonts.mjs && expo export -p web && workbox generateSW workbox-config.cjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@better-auth/passkey": "1.7.7",
+    "@expo-google-fonts/geist": "^0.4.2",
+    "@fokus/core": "workspace:*",
+    "@fokus/ui": "workspace:*",
+    "better-auth": "1.7.7",
+    "expo": "~57.0.26",
+    "expo-constants": "~57.0.20",
+    "expo-document-picker": "~57.0.3",
+    "expo-font": "~57.0.4",
+    "expo-haptics": "~57.0.3",
+    "expo-linking": "~57.0.11",
+    "expo-router": "~57.0.24",
+    "expo-status-bar": "~57.0.1",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-native": "0.86.3",
+    "react-native-safe-area-context": "~5.7.0",
+    "react-native-screens": "~4.26.2",
+    "react-native-svg": "15.15.4",
+    "react-native-web": "^0.21.3"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.2",
+    "typescript": "~6.0.3",
+    "workbox-cli": "7.4.1"
+  }
+}

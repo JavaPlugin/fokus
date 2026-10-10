@@ -1,0 +1,12 @@
+data.json
+pnpm-lock.yaml
+**/dist/
+**/.expo/
+**/drizzle/meta/
+**/.data/
+apps/web/AGENTS.md
+playwright-report/
+test-results/
+e2e/.auth.json
+PROMPT.md
+design/

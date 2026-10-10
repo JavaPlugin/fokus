@@ -1,0 +1,31 @@
+{
+  "name": "@fokus/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch --env-file-if-exists=.env src/main.ts",
+    "build": "tsup",
+    "start": "node dist/main.js",
+    "test": "vitest run",
+    "typecheck": "tsc -p ."
+  },
+  "dependencies": {
+    "@better-auth/passkey": "1.7.7",
+    "@hono/node-server": "2.1.3",
+    "@fokus/core": "workspace:*",
+    "@fokus/db": "workspace:*",
+    "better-auth": "1.7.7",
+    "hono": "4.13.12",
+    "nodemailer": "10.0.14",
+    "web-push": "3.6.7",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@types/nodemailer": "^8.0.2",
+    "@types/web-push": "3.6.4",
+    "tsup": "8.5.1",
+    "tsx": "4.23.15",
+    "vitest": "5.0.3"
+  }
+}

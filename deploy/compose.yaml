@@ -1,0 +1,112 @@
+# FOKUS-Stack. Liegt auf der VM unter /opt/fokus, Werte kommen aus .env.
+# Kein Dienst veröffentlicht einen Port am Host. Von außen erreichbar ist nur der Tunnel.
+# Netze: edge (Caddy, API, Tunnel), db (nur intern), ops (API ↔ Updater, sonst niemand).
+name: fokus
+
+x-restart: &restart
+  restart: unless-stopped
+
+services:
+  caddy:
+    <<: *restart
+    image: ${FK_IMAGE_PREFIX}-web:${FK_VERSION:?FK_VERSION fehlt}
+    depends_on:
+      api:
+        condition: service_healthy
+    volumes:
+      # Liegt hier eine Datei „on“, zeigt Caddy die Wartungsseite (Updater schaltet das).
+      - ./maintenance:/maint:ro
+    networks: [edge]
+
+  api:
+    <<: *restart
+    image: ${FK_IMAGE_PREFIX}-api:${FK_VERSION:?FK_VERSION fehlt}
+    environment:
+      DATABASE_URL: postgres://fokus_app:${APP_DB_PASSWORD}@db:5432/fokus
+      PUBLIC_URL: ${PUBLIC_URL}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
+      SETUP_CODE: ${SETUP_CODE}
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASS: ${SMTP_PASS}
+      SMTP_FROM: ${SMTP_FROM}
+      MAIL_FROM_NAME: ${MAIL_FROM_NAME:-FOKUS}
+      UPDATER_URL: http://updater:8080
+      UPDATER_SECRET: ${UPDATER_SECRET:-}
+      HEARTBEAT_URL: ${HEARTBEAT_URL:-}
+    depends_on:
+      db:
+        condition: service_healthy
+    # edge: ausgehend für SMTP, eingehend nur von Caddy. db: nur intern. ops: zum Updater.
+    networks: [edge, db, ops]
+
+  db:
+    <<: *restart
+    image: postgres:17.11-bookworm
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db/10-app-role.sh:/docker-entrypoint-initdb.d/10-app-role.sh:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d fokus']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    shm_size: 128mb
+    networks: [db]
+
+  backup:
+    <<: *restart
+    image: postgres:17.11-bookworm
+    entrypoint: ['/bin/sh', '/backup.sh']
+    environment:
+      PGHOST: db
+      PGUSER: postgres
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: fokus
+      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-30}
+      BACKUP_HOUR: ${BACKUP_HOUR:-3}
+      TZ: ${TZ:-Europe/Berlin}
+    volumes:
+      - ./backup.sh:/backup.sh:ro
+      - ./backups:/backups
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [db]
+
+  # Einziger Dienst mit Docker-Zugriff. Kennt nur prüfen, installieren, Rollback und Backups.
+  updater:
+    <<: *restart
+    image: ${FK_IMAGE_PREFIX}-updater:${FK_VERSION:?FK_VERSION fehlt}
+    env_file: .env
+    environment:
+      # Zugang zum Backup-Ziel außer Haus (rclone), optional
+      RCLONE_CONFIG: /opt/fokus/rclone.conf
+      FK_DIR: /opt/fokus
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /opt/fokus:/opt/fokus
+    networks: [ops]
+
+  cloudflared:
+    <<: *restart
+    image: cloudflare/cloudflared:${CLOUDFLARED_VERSION:-2026.9.3}
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on: [caddy]
+    networks: [edge]
+
+networks:
+  edge: {}
+  db:
+    internal: true
+  ops: {}
+
+volumes:
+  pgdata: {}
