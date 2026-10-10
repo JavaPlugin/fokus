@@ -3,12 +3,13 @@
 // nehmen = /api/credit/spend (reason redirect), trotzdem öffnen = nichts.
 // Die PWA sieht nicht, welche App geöffnet wird: die Kurzbefehle-Automation ruft /umleiten?app=…
 import { MIN_MS, creditSummary, pickRedirectTask, todayIn, type Day } from '@fokus/core';
-import { creditEntry, task, timeBlock, withUser, type Db } from '@fokus/db';
-import { and, eq, gt, gte, lt } from 'drizzle-orm';
+import { creditEntry, task, withUser, type Db } from '@fokus/db';
+import { and, eq, gt, gte } from 'drizzle-orm';
 import type { Hono } from 'hono';
 import { z } from 'zod';
 import type { Vars } from './app';
-import { authed, dayRange, lite, loadCredit, loadSettings, parseBody, uuid } from './planning';
+import { buildAgenda } from './agenda';
+import { authed, dayRange, loadCredit, loadSettings, parseBody, uuid } from './planning';
 
 export const REDIRECT_APPS: Record<string, { label: string; url: string }> = {
   instagram: { label: 'Instagram', url: 'instagram://' },
@@ -41,26 +42,20 @@ export function registerRedirectRoutes(app: Hono<Vars>, { db }: { db: Db }) {
     const day: Day = todayIn();
     const out = await withUser(db, u.id, async (tx) => {
       const settings = await loadSettings(tx);
-      const { from, to } = dayRange(day);
-      const blocks = await tx
-        .select()
-        .from(timeBlock)
-        .where(
-          and(
-            eq(timeBlock.kind, 'social'),
-            gte(timeBlock.startsAt, from),
-            lt(timeBlock.startsAt, to),
-          ),
-        );
-      const slots = blocks.filter((b) => b.status !== 'skipped');
-      const inside = slots.find(
-        (b) => b.startsAt.getTime() <= now && b.startsAt.getTime() + b.minutes * MIN_MS > now,
-      );
-      const next = slots
-        .filter((b) => b.status === 'planned' && b.startsAt.getTime() > now)
-        .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime())[0];
+      const { from } = dayRange(day);
+      // Social-Zeiten heute aus dem Tagesplan: gerade im Slot? sonst der nächste
+      const agenda = await buildAgenda(tx, day, day, now);
+      const slots = (agenda.days[day]?.items ?? []).filter((i) => i.kind === 'social' && !i.done);
+      const start = (i: { start: string }) => new Date(i.start).getTime();
+      const inside = slots.find((i) => start(i) <= now && start(i) + i.minutes * MIN_MS > now);
+      const next = slots.filter((i) => start(i) > now).sort((a, b) => start(a) - start(b))[0];
       const open = await tx.select().from(task).where(eq(task.status, 'open'));
-      const pick = pickRedirectTask(open.map(lite), 2);
+      const pick = pickRedirectTask(
+        open
+          .filter((t) => t.kind === 'work' && !t.recurrence && t.schedule !== 'fixed')
+          .map((t) => ({ id: t.id, title: t.title, minutes: t.minutes, due: t.due })),
+        2,
+      );
       const entries = await loadCredit(tx);
       const bonusToday = (
         await tx
@@ -79,7 +74,7 @@ export function registerRedirectRoutes(app: Hono<Vars>, { db }: { db: Db }) {
         label: info?.label ?? 'Social Media',
         url: info?.url ?? null,
         insideSlot: !!inside,
-        nextSocial: next?.startsAt.toISOString() ?? null,
+        nextSocial: next?.start ?? null,
         task: pick ? { id: pick.id, title: pick.title, minutes: pick.minutes } : null,
         fallback: FALLBACKS[Math.floor(now / 60_000) % FALLBACKS.length],
         bonus: bonusToday < BONUS_PER_DAY ? settings.redirectBonus : 0,

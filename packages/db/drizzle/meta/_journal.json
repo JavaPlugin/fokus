@@ -64,6 +64,20 @@
       "when": 1791625609402,
       "tag": "0008_focus_rooms_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1791629025520,
+      "tag": "0009_tasks_v2",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1791629035104,
+      "tag": "0010_occurrence_rls",
+      "breakpoints": true
     }
   ]
 }

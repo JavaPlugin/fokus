@@ -13,13 +13,14 @@ import {
 import {
   creditEntry,
   focusSession,
-  timeBlock,
   user,
   userSettings,
   withAdmin,
+  withUser,
   type Db,
 } from '@fokus/db';
-import { and, gte, inArray, lt } from 'drizzle-orm';
+import { and, gte, lt } from 'drizzle-orm';
+import { buildAgenda } from './agenda';
 import { berlin, type Notifier } from './notify';
 import { recapMail, reminderMail } from './mail-templates';
 
@@ -38,42 +39,42 @@ export function createReminders({
   publicUrl: string;
 }) {
   async function blockReminders(now: Date) {
-    const from = new Date(now.getTime() - MIN_MS);
-    const to = new Date(now.getTime() + LEAD_MINUTES * MIN_MS);
-    const due = await withAdmin(db, (tx) =>
-      tx
-        .select()
-        .from(timeBlock)
-        .where(
-          and(
-            inArray(timeBlock.kind, ['focus', 'social']),
-            inArray(timeBlock.status, ['planned']),
-            gte(timeBlock.startsAt, from),
-            lt(timeBlock.startsAt, to),
-          ),
-        ),
-    );
+    const lo = now.getTime() - MIN_MS;
+    const hi = now.getTime() + LEAD_MINUTES * MIN_MS;
+    const { day } = berlin(now);
+    const users = await db.select({ id: user.id }).from(user);
     let sent = 0;
-    for (const b of due) {
-      const kind = b.kind === 'focus' ? ('focus' as const) : ('social' as const);
-      const title = b.title || (kind === 'focus' ? 'Fokus-Block' : 'Social-Slot');
-      const time = clock(b.startsAt);
-      const inMinutes = Math.max(0, Math.round((b.startsAt.getTime() - now.getTime()) / MIN_MS));
-      const ok = await notifier.send(
-        b.userId,
-        kind,
-        {
-          push: {
-            title: kind === 'focus' ? `Gleich: ${title}` : 'Gleich: Social-Slot',
-            body: `${time} Uhr · ${b.minutes} Min.`,
-            url: '/',
+    for (const u of users) {
+      // Tagesplan des Nutzers: was beginnt in den nächsten Minuten?
+      const agenda = await withUser(db, u.id, (tx) => buildAgenda(tx, day, day, now.getTime()));
+      for (const i of agenda.days[day]?.items ?? []) {
+        const start = new Date(i.start).getTime();
+        if (i.done || (i.kind !== 'work' && i.kind !== 'social') || start < lo || start >= hi)
+          continue;
+        const kind = i.kind === 'work' ? ('focus' as const) : ('social' as const);
+        const time = clock(i.start);
+        const ok = await notifier.send(
+          u.id,
+          kind,
+          {
+            push: {
+              title: kind === 'focus' ? `Gleich: ${i.title}` : 'Gleich: Social-Slot',
+              body: `${time} Uhr · ${i.minutes} Min.`,
+              url: '/',
+            },
+            mail: (to) =>
+              reminderMail(to, publicUrl, {
+                title: i.title,
+                kind,
+                time,
+                minutes: i.minutes,
+                inMinutes: Math.max(0, Math.round((start - now.getTime()) / MIN_MS)),
+              }),
           },
-          mail: (to) =>
-            reminderMail(to, publicUrl, { title, kind, time, minutes: b.minutes, inMinutes }),
-        },
-        `block:${b.id}`,
-      );
-      if (ok) sent++;
+          `block:${i.key}`,
+        );
+        if (ok) sent++;
+      }
     }
     return sent;
   }

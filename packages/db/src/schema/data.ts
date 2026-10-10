@@ -13,6 +13,7 @@ import {
   unique,
   uuid,
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import { user } from './auth';
 
 export const owner = () =>
@@ -38,13 +39,11 @@ export const userSettings = pgTable('user_settings', {
     pauseMinutes?: number;
     creditPerHour?: number;
     dailyLimit?: number;
-    workStart?: string;
-    workEnd?: string;
+    week?: ({ from: string; to: string } | null)[];
     baselineScroll?: number;
     streakGoal?: number;
     redirectBonus?: number;
     redirectSpend?: number;
-    peaks?: { from: string; to: string }[];
   }>(),
   updatedAt: timestamp('updated_at', { withTimezone: true })
     .notNull()
@@ -52,17 +51,36 @@ export const userSettings = pgTable('user_settings', {
     .$onUpdate(() => new Date()),
 });
 
-/** Aufgabe. Dauer in ganzen Minuten; `mini` = 2-Minuten-Aufgabe für Lücken und „Umleiten“. */
+/**
+ * Aufgabe: die eine Sache in FOKUS. Art (Arbeit, Pause, Social), Dauer in ganzen Minuten, Wann
+ * (automatisch geplant, feste Zeit oder später) und optional eine Wiederholung. Bei Wiederholung
+ * ist `status` immer „open“: erledigt wird nur das Vorkommen (task_occurrence).
+ */
 export const task = pgTable(
   'task',
   {
     id: uuid('id').primaryKey().defaultRandom(),
     userId: owner(),
     title: text('title').notNull(),
-    minutes: integer('minutes').notNull().default(25),
-    heavy: boolean('heavy').notNull().default(false),
-    mini: boolean('mini').notNull().default(false),
+    kind: text('kind', { enum: ['work', 'pause', 'social'] })
+      .notNull()
+      .default('work'),
+    minutes: integer('minutes').notNull().default(30),
+    schedule: text('schedule', { enum: ['auto', 'fixed', 'later'] })
+      .notNull()
+      .default('later'),
+    /** Feste Zeit (Beginn); bei Wiederholung zählt nur die Uhrzeit (Berlin) */
+    fixedAt: timestamp('fixed_at', { withTimezone: true, mode: 'date' }),
     due: date('due', { mode: 'string' }),
+    /** { freq: 'daily' | 'weekdays' | 'weekly', days?: 0–6[] } */
+    recurrence: jsonb('recurrence').$type<{
+      freq: 'daily' | 'weekdays' | 'weekly';
+      days?: number[];
+    }>(),
+    /** Tag, ab dem eine Wiederholung gilt (feste Zeit: deren Tag, sonst Anlegetag) */
+    anchor: date('anchor', { mode: 'string' })
+      .notNull()
+      .default(sql`current_date`),
     status: text('status', { enum: ['open', 'done'] })
       .notNull()
       .default('open'),
@@ -71,6 +89,28 @@ export const task = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
   },
   (t) => [index('task_user_status').on(t.userId, t.status)],
+);
+
+/**
+ * Ein Vorkommen einer wiederkehrenden Aufgabe an einem Tag: erledigt, übersprungen („nur diese
+ * löschen“) oder abgeändert („nur diese bearbeiten“: Titel, Dauer, Uhrzeit).
+ */
+export const taskOccurrence = pgTable(
+  'task_occurrence',
+  {
+    userId: owner(),
+    taskId: uuid('task_id')
+      .notNull()
+      .references(() => task.id, { onDelete: 'cascade' }),
+    day: date('day', { mode: 'string' }).notNull(),
+    doneAt: timestamp('done_at', { withTimezone: true, mode: 'date' }),
+    skipped: boolean('skipped').notNull().default(false),
+    title: text('title'),
+    minutes: integer('minutes'),
+    /** „HH:MM“ (Berlin), nur bei fester Zeit */
+    time: text('time'),
+  },
+  (t) => [primaryKey({ columns: [t.taskId, t.day] })],
 );
 
 /** Kalender-Abo (ICS-Adresse von Google, Apple …). Termine kommen als belegte Blöcke. */
@@ -86,17 +126,6 @@ export const calendarFeed = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
   },
   (t) => [index('calendar_feed_user').on(t.userId)],
-);
-
-/** Energie am Morgen (niedrig, normal, hoch), ein Eintrag pro Tag. */
-export const energyDay = pgTable(
-  'energy_day',
-  {
-    userId: owner(),
-    day: date('day', { mode: 'string' }).notNull(),
-    level: text('level', { enum: ['low', 'normal', 'high'] }).notNull(),
-  },
-  (t) => [primaryKey({ columns: [t.userId, t.day] })],
 );
 
 /** Zeitblock im Kalender: Fokus, Pause, Social-Slot oder Termin. */
@@ -160,22 +189,6 @@ export const creditEntry = pgTable(
     blockId: uuid('block_id').references(() => timeBlock.id, { onDelete: 'set null' }),
   },
   (t) => [index('credit_entry_user_at').on(t.userId, t.at)],
-);
-
-/** Schnell notiert, FOKUS plant später ein (wird zur Aufgabe). */
-export const inboxItem = pgTable(
-  'inbox_item',
-  {
-    id: uuid('id').primaryKey().defaultRandom(),
-    userId: owner(),
-    text: text('text').notNull(),
-    status: text('status', { enum: ['open', 'planned', 'dismissed'] })
-      .notNull()
-      .default('open'),
-    taskId: uuid('task_id').references(() => task.id, { onDelete: 'set null' }),
-    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
-  },
-  (t) => [index('inbox_item_user_status').on(t.userId, t.status)],
 );
 
 /** Web-Push-Abos (ein Gerät = ein Abo; meldet sich jemand anderes auf dem Gerät an, bekommt er ein eigenes). */

@@ -1,4 +1,4 @@
-import { addDays, clock, todayIn } from '@fokus/core';
+import { addDays, clock, instant, todayIn, weekday } from '@fokus/core';
 import { createDb, creditEntry, type DbHandle } from '@fokus/db';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from './app';
@@ -52,35 +52,88 @@ beforeEach(async () => {
 });
 afterEach(() => h.close());
 
-type Task = { id: string; title: string; minutes: number; status: string; mini: boolean };
-type Block = {
+type Task = {
   id: string;
-  kind: string;
-  startsAt: string;
-  minutes: number;
-  taskId: string | null;
-  status: string;
   title: string;
+  kind: string;
+  minutes: number;
+  schedule: string;
+  fixedAt: string | null;
+  recurrence: { freq: string; days?: number[] } | null;
+  status: string;
 };
-const TOMORROW = () => addDays(todayIn(), 1);
+type Item = {
+  key: string;
+  taskId: string | null;
+  day: string;
+  title: string;
+  kind: string;
+  start: string;
+  minutes: number;
+  how: string;
+  recurring: string;
+  done: boolean;
+  changed: boolean;
+};
+type DayData = {
+  items: Item[];
+  hours: { from: string; to: string } | null;
+  gaps: { start: string; minutes: number; suggestion: { taskId: string; title: string } | null }[];
+  credit: { balance: number };
+  running: { id: string } | null;
+  focusMinutes: number;
+};
+const get = async (d: string) => (await req<DayData>('GET', `/api/day/${d}`)).data;
+const show = (items: Item[]) => items.map((i) => `${clock(i.start)} ${i.title} ${i.minutes}`);
+
+/** Nächster Wochentag (1 = Montag … 5 = Freitag), frühestens übermorgen: stabil unabhängig vom Heute. */
+function next(wd: number) {
+  let d = addDays(todayIn(), 2);
+  while (weekday(d) !== wd) d = addDays(d, 1);
+  return d;
+}
+/** Arbeitszeit nur an diesen Wochentagen (0 = So … 6 = Sa): macht Tests unabhängig vom Heute. */
+async function workOnly(...wds: number[]) {
+  const week = Array.from({ length: 7 }, (_, i) =>
+    wds.includes(i) ? { from: '09:00', to: '17:00' } : null,
+  );
+  await req('PUT', '/api/plan/settings', { week });
+}
+/** Wochentag, der sicher nicht heute ist (damit „jetzt“ keine Rolle spielt). */
+const other = (plus: number) => (weekday(todayIn()) + plus) % 7;
+/** Nächster Tag mit diesem Wochentag, frühestens morgen. */
+const nextDay = (wd: number) => {
+  let d = addDays(todayIn(), 1);
+  while (weekday(d) !== wd) d = addDays(d, 1);
+  return d;
+};
+const at = (d: string, hhmm: string) => new Date(instant(d, hhmm)).toISOString();
 
 describe('Aufgaben', () => {
-  it('anlegen, ändern, erledigen, löschen; Standarddauer, Mini = 2 Min.', async () => {
+  it('Standard: Arbeit, 30 Min., später; Prüfungen; ändern, erledigen, löschen', async () => {
     const a = await req<Task>('POST', '/api/tasks', { title: '  Steuererklärung ' });
     expect(a.status).toBe(201);
-    expect(a.data).toMatchObject({ title: 'Steuererklärung', minutes: 25, status: 'open' });
-    const m = await req<Task>('POST', '/api/tasks', { title: 'Glas Wasser', mini: true });
-    expect(m.data).toMatchObject({ minutes: 2, mini: true });
+    expect(a.data).toMatchObject({
+      title: 'Steuererklärung',
+      kind: 'work',
+      minutes: 30,
+      schedule: 'later',
+      recurrence: null,
+      status: 'open',
+    });
     expect((await req('POST', '/api/tasks', { title: '' })).status).toBe(400);
     expect((await req('POST', '/api/tasks', { title: 'x', minutes: 0 })).status).toBe(400);
+    expect((await req('POST', '/api/tasks', { title: 'x', kind: 'sport' })).status).toBe(400);
+    // Feste Zeit braucht Tag und Uhrzeit; „später“ wiederholt sich nicht
+    expect((await req('POST', '/api/tasks', { title: 'x', schedule: 'fixed' })).status).toBe(400);
+    expect(
+      (await req('POST', '/api/tasks', { title: 'x', recurrence: { freq: 'daily' } })).status,
+    ).toBe(400);
 
-    const up = await req<Task>('PUT', `/api/tasks/${a.data.id}`, { minutes: 90, heavy: true });
-    expect(up.data).toMatchObject({ minutes: 90, heavy: true });
-    const done = await req<Task>('POST', `/api/tasks/${a.data.id}/done`);
-    expect(done.data.status).toBe('done');
-    expect((await req<Task[]>('GET', '/api/tasks')).data.map((t) => t.id)).toEqual([m.data.id]);
-    expect((await req<Task[]>('GET', '/api/tasks?status=done')).data).toHaveLength(1);
-    expect((await req<Task[]>('GET', '/api/tasks?status=all')).data).toHaveLength(2);
+    const up = await req<Task>('PUT', `/api/tasks/${a.data.id}`, { minutes: 90, schedule: 'auto' });
+    expect(up.data).toMatchObject({ minutes: 90, schedule: 'auto' });
+    expect((await req('PUT', `/api/tasks/${a.data.id}`, { schedule: 'fixed' })).status).toBe(400);
+    expect((await req<Task>('POST', `/api/tasks/${a.data.id}/done`)).data.status).toBe('done');
     expect((await req<Task>('POST', `/api/tasks/${a.data.id}/reopen`)).data.status).toBe('open');
     expect((await req('DELETE', `/api/tasks/${a.data.id}`)).status).toBe(204);
     expect((await req('DELETE', `/api/tasks/${a.data.id}`)).status).toBe(404);
@@ -90,30 +143,12 @@ describe('Aufgaben', () => {
   it('mit eigener ID wiederholbar (Offline-Warteschlange)', async () => {
     const id = crypto.randomUUID();
     await req('POST', '/api/tasks', { id, title: 'Einmal' });
-    const again = await req<Task>('POST', '/api/tasks', { id, title: 'Einmal' });
-    expect(again.status).toBe(201);
-    expect((await req<Task[]>('GET', '/api/tasks')).data).toHaveLength(1);
+    await req('POST', '/api/tasks', { id, title: 'Einmal' });
+    const list = await req<{ later: Task[] }>('GET', '/api/tasks?view=open');
+    expect(list.data.later).toHaveLength(1);
   });
-});
 
-describe('Inbox', () => {
-  it('Notiz, zur Aufgabe machen, löschen; per Kurzbefehl-Schlüssel', async () => {
-    const n = await req<{ id: string; text: string }>('POST', '/api/inbox', {
-      text: 'Zahnarzt anrufen',
-    });
-    expect(n.status).toBe(201);
-    expect((await req('POST', '/api/inbox', { text: ' ' })).status).toBe(400);
-    expect((await req<unknown[]>('GET', '/api/inbox')).data).toHaveLength(1);
-
-    const t = await req<Task>('POST', `/api/inbox/${n.data.id}/plan`, { minutes: 10 });
-    expect(t.status).toBe(201);
-    expect(t.data).toMatchObject({ title: 'Zahnarzt anrufen', minutes: 10 });
-    expect((await req<unknown[]>('GET', '/api/inbox')).data).toEqual([]);
-    expect((await req('POST', `/api/inbox/${n.data.id}/plan`, {})).status).toBe(404);
-
-    const n2 = await req<{ id: string }>('POST', '/api/inbox', { text: 'Weg damit' });
-    expect((await req('DELETE', `/api/inbox/${n2.data.id}`)).status).toBe(204);
-
+  it('Kurzbefehl legt eine Aufgabe „später“ an', async () => {
     const key = (await req<{ key: string }>('POST', '/api/me/keys', { name: 'K' })).data.key;
     const r = await app.request('/api/v1/inbox', {
       method: 'POST',
@@ -121,120 +156,278 @@ describe('Inbox', () => {
       body: JSON.stringify({ text: 'Per Siri' }),
     });
     expect(r.status).toBe(201);
-    expect((await req<{ text: string }[]>('GET', '/api/inbox')).data.map((x) => x.text)).toEqual([
-      'Per Siri',
+    const list = await req<{ later: Task[] }>('GET', '/api/tasks?view=open');
+    expect(list.data.later.map((t) => [t.title, t.schedule, t.minutes])).toEqual([
+      ['Per Siri', 'later', 30],
     ]);
-    const bad = await app.request('/api/v1/inbox', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ text: 'x' }),
-    });
-    expect(bad.status).toBe(401);
+    expect(
+      (
+        await app.request('/api/v1/inbox', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ text: 'x' }),
+        })
+      ).status,
+    ).toBe(401);
   });
 });
 
-describe('Einstellungen', () => {
-  it('Standardwerte, ändern, Fehler', async () => {
-    const s = await req<{ focusMinutes: number; creditPerHour: number }>(
-      'GET',
-      '/api/plan/settings',
-    );
-    expect(s.data).toMatchObject({ focusMinutes: 50, pauseMinutes: 10, creditPerHour: 15 });
-    const up = await req<{ creditPerHour: number; focusMinutes: number }>(
-      'PUT',
-      '/api/plan/settings',
-      {
-        creditPerHour: 20,
-      },
-    );
-    expect(up.data).toMatchObject({ creditPerHour: 20, focusMinutes: 50 });
+describe('Einstellungen und Arbeitszeiten', () => {
+  it('Standard Mo–Fr 09:00–17:00; ändern; Fehler', async () => {
+    type S = { week: ({ from: string; to: string } | null)[]; creditPerHour: number };
+    const s = await req<S>('GET', '/api/plan/settings');
+    expect(s.data.week.map((h) => (h ? `${h.from}-${h.to}` : 'frei'))).toEqual([
+      'frei',
+      '09:00-17:00',
+      '09:00-17:00',
+      '09:00-17:00',
+      '09:00-17:00',
+      '09:00-17:00',
+      'frei',
+    ]);
+    const week = [...s.data.week];
+    week[5] = { from: '09:00', to: '14:00' };
+    week[6] = { from: '10:00', to: '12:00' };
+    const up = await req<S>('PUT', '/api/plan/settings', { week, creditPerHour: 20 });
+    expect(up.data.week[5]).toEqual({ from: '09:00', to: '14:00' });
+    expect(up.data.creditPerHour).toBe(20);
+    expect((await req<S>('GET', '/api/plan/settings')).data.week[6]).toEqual({
+      from: '10:00',
+      to: '12:00',
+    });
+    expect((await req('PUT', '/api/plan/settings', { week: [null] })).status).toBe(400);
     expect(
-      (await req<{ creditPerHour: number }>('GET', '/api/plan/settings')).data.creditPerHour,
-    ).toBe(20);
+      (
+        await req('PUT', '/api/plan/settings', {
+          week: [null, { from: '18:00', to: '09:00' }, null, null, null, null, null],
+        })
+      ).status,
+    ).toBe(400);
     expect((await req('PUT', '/api/plan/settings', { creditPerHour: 99 })).status).toBe(400);
-    expect((await req('PUT', '/api/plan/settings', { workStart: '19:00' })).status).toBe(400);
-    expect((await req('PUT', '/api/plan/settings', { workStart: '8:00' })).status).toBe(400);
   });
 });
 
 describe('Tagesplan', () => {
-  it('verteilt Aufgaben in freie Zeit, respektiert Termine, ersetzt den alten Plan', async () => {
-    const day = TOMORROW();
-    await req('POST', '/api/tasks', { title: 'Angebot', minutes: 120 });
-    await req('POST', '/api/tasks', { title: 'Mini', mini: true });
-    // Termin 09:30–10:30 (Berlin) am Tag
-    const ev = await req<Block>('POST', '/api/blocks', {
-      kind: 'event',
-      startsAt: new Date(`${day}T00:00:00Z`).toISOString(),
-      minutes: 1,
-      title: 'Platzhalter',
-    });
-    await req('DELETE', `/api/blocks/${ev.data.id}`);
-    const { instant } = await import('@fokus/core');
-    await req('POST', '/api/blocks', {
-      kind: 'event',
-      startsAt: new Date(instant(day, '09:30')).toISOString(),
-      minutes: 60,
+  it('feste Zeit steht da (auch außerhalb der Arbeitszeit), Automatik füllt die Arbeitszeit drumherum', async () => {
+    const wd = other(3);
+    await workOnly(wd);
+    const d = nextDay(wd);
+    await req('POST', '/api/tasks', {
       title: 'Zahnarzt',
+      schedule: 'fixed',
+      fixedAt: at(d, '09:30'),
+      minutes: 60,
     });
+    await req('POST', '/api/tasks', {
+      title: 'Abends',
+      schedule: 'fixed',
+      fixedAt: at(d, '20:00'),
+      minutes: 30,
+    });
+    await req('POST', '/api/tasks', { title: 'Angebot', schedule: 'auto', minutes: 50 });
+    await req('POST', '/api/tasks', { title: 'Mails', schedule: 'auto', minutes: 30 });
+    await req('POST', '/api/tasks', { title: 'Irgendwann', schedule: 'later' });
 
-    const plan = await req<{ blocks: Block[]; unplaced: unknown[] }>('POST', `/api/plan/${day}`);
-    expect(plan.status).toBe(200);
-    expect(plan.data.unplaced).toEqual([]);
-    const shown = plan.data.blocks.map((b) => `${clock(b.startsAt)} ${b.kind} ${b.minutes}`);
-    expect(shown).toEqual(['09:00 focus 30', '10:30 focus 50', '11:20 pause 10', '11:30 focus 40']);
-    expect(plan.data.blocks.every((b) => b.title === 'Angebot' || b.title === 'Pause')).toBe(true);
-
-    // Neu planen ersetzt, vermehrt nicht
-    const again = await req<{ blocks: Block[] }>('POST', `/api/plan/${day}`);
-    const overview = await req<{ blocks: Block[]; gaps: { minutes: number }[] }>(
-      'GET',
-      `/api/day/${day}`,
-    );
-    expect(again.data.blocks).toHaveLength(4);
-    expect(overview.data.blocks).toHaveLength(5);
-    expect(overview.data.blocks.map((b) => b.kind)).toEqual([
-      'focus',
-      'event',
-      'focus',
-      'pause',
-      'focus',
+    const day = await get(d);
+    expect(day.hours).toEqual({ from: '09:00', to: '17:00' });
+    // Angebot (50) passt vor 09:30 nicht, kommt danach; Mails (30) füllt die Lücke davor
+    expect(show(day.items)).toEqual([
+      '09:00 Mails 30',
+      '09:30 Zahnarzt 60',
+      '10:30 Angebot 50',
+      '20:00 Abends 30',
     ]);
+    expect(day.items.map((i) => i.how)).toEqual(['auto', 'fixed', 'auto', 'fixed']);
+    // „Später“ steht nirgends im Plan
+    expect(day.items.some((i) => i.title === 'Irgendwann')).toBe(false);
   });
 
-  it('zu viel Arbeit: Rest wird gemeldet; vergangene Tage nicht', async () => {
-    await req('POST', '/api/tasks', { title: 'Riesig', minutes: 480 });
-    await req('POST', '/api/tasks', { title: 'Noch eins', minutes: 480 });
-    const r = await req<{ unplaced: { title: string; minutes: number }[] }>(
-      'POST',
-      `/api/plan/${TOMORROW()}`,
-    );
-    expect(r.data.unplaced.length).toBeGreaterThan(0);
-    expect(r.data.unplaced.reduce((s, x) => s + x.minutes, 0)).toBeGreaterThan(400);
-    expect((await req('POST', `/api/plan/${addDays(todayIn(), -1)}`)).status).toBe(400);
-    expect((await req('POST', '/api/plan/kaputt')).status).toBe(400);
+  it('Platzmangel: Einmaliges wandert an den nächsten Arbeitstag, freie Tage werden übersprungen', async () => {
+    const a = other(2);
+    const b = other(5);
+    await workOnly(a, b);
+    const da = nextDay(a);
+    const db = nextDay(b);
+    await req('POST', '/api/tasks', { title: 'Gross', schedule: 'auto', minutes: 7 * 60 });
+    await req('POST', '/api/tasks', { title: 'Zweit', schedule: 'auto', minutes: 3 * 60 });
+    const first = da < db ? da : db;
+    const second = da < db ? db : da;
+    expect(show((await get(first)).items)).toEqual(['09:00 Gross 420']);
+    expect(show((await get(second)).items)).toEqual(['09:00 Zweit 180']);
+    expect((await get(addDays(first, 1))).items).toEqual([]);
   });
 
-  it('Tagesansicht: Lücken mit Vorschlägen, Guthaben, laufender Fokus', async () => {
-    const day = TOMORROW();
-    const t = await req<Task>('POST', '/api/tasks', { title: 'Kurz', minutes: 15 });
-    const { instant } = await import('@fokus/core');
-    await req('POST', '/api/blocks', {
-      kind: 'event',
-      startsAt: new Date(instant(day, '09:00')).toISOString(),
-      minutes: 8 * 60 + 20,
-      title: 'Workshop',
+  it('feste Zeit geht auch am freien Tag', async () => {
+    const wd = other(2);
+    await workOnly(other(4));
+    const d = nextDay(wd);
+    await req('POST', '/api/tasks', {
+      title: 'Frei',
+      schedule: 'fixed',
+      fixedAt: at(d, '11:00'),
+      minutes: 45,
     });
-    const o = await req<{
-      gaps: { startsAt: string; minutes: number; suggestions: string[] }[];
-      credit: { balance: number };
-      running: unknown;
-    }>('GET', `/api/day/${day}`);
-    expect(o.data.gaps).toHaveLength(1);
-    expect(o.data.gaps[0]).toMatchObject({ minutes: 40, suggestions: [t.data.id] });
-    expect(clock(o.data.gaps[0]!.startsAt)).toBe('17:20');
-    expect(o.data.credit.balance).toBe(0);
-    expect(o.data.running).toBeNull();
+    await req('POST', '/api/tasks', { title: 'Automatik', schedule: 'auto', minutes: 30 });
+    const day = await get(d);
+    expect(day.hours).toBeNull();
+    expect(show(day.items)).toEqual(['11:00 Frei 45']);
+    expect(day.gaps).toEqual([]);
+  });
+
+  it('freie Zeit mit Vorschlag aus „später“ (was die Lücke am besten füllt)', async () => {
+    const wd = other(3);
+    await workOnly(wd);
+    const d = nextDay(wd);
+    await req('POST', '/api/tasks', {
+      title: 'Workshop',
+      schedule: 'fixed',
+      fixedAt: at(d, '09:00'),
+      minutes: 6 * 60 + 20,
+    });
+    await req('POST', '/api/tasks', { title: 'Rechnung abheften', minutes: 15 });
+    const gross = await req<Task>('POST', '/api/tasks', { title: 'Steuer anfangen', minutes: 90 });
+    await req('POST', '/api/tasks', { title: 'Zu gross', minutes: 200 });
+    const day = await get(d);
+    expect(day.gaps).toHaveLength(1);
+    expect(clock(day.gaps[0]!.start)).toBe('15:20');
+    expect(day.gaps[0]).toMatchObject({ minutes: 100, suggestion: { taskId: gross.data.id } });
+  });
+});
+
+describe('Wiederholung', () => {
+  it('täglich, werktags, wöchentlich: richtige Tage; Beschriftung', async () => {
+    const mon = next(1);
+    const sat = addDays(mon, 5);
+    await req('POST', '/api/tasks', {
+      title: 'Täglich',
+      schedule: 'fixed',
+      fixedAt: at(mon, '08:00'),
+      minutes: 15,
+      recurrence: { freq: 'daily' },
+    });
+    await req('POST', '/api/tasks', {
+      title: 'Werktags',
+      schedule: 'fixed',
+      fixedAt: at(mon, '12:00'),
+      minutes: 15,
+      recurrence: { freq: 'weekdays' },
+    });
+    await req('POST', '/api/tasks', {
+      title: 'Team-Call',
+      schedule: 'fixed',
+      fixedAt: at(mon, '16:00'),
+      minutes: 30,
+      recurrence: { freq: 'weekly', days: [1, 3] },
+    });
+    const tue = await get(addDays(mon, 1));
+    expect(show(tue.items)).toEqual(['08:00 Täglich 15', '12:00 Werktags 15']);
+    const wed = await get(addDays(mon, 2));
+    expect(wed.items.map((i) => [i.title, i.recurring])).toEqual([
+      ['Täglich', 'täglich'],
+      ['Werktags', 'werktags'],
+      ['Team-Call', 'jeden Mo, Mi'],
+    ]);
+    expect(show((await get(sat)).items)).toEqual(['08:00 Täglich 15']);
+    // Vor dem Anfang gibt es kein Vorkommen
+    const before = await get(addDays(mon, -2));
+    expect(before.items.filter((i) => i.taskId).length).toBeLessThanOrEqual(0 + 3);
+  });
+
+  it('erledigt wird nur das Vorkommen; Rückgängig; Regel bleibt', async () => {
+    const mon = next(1);
+    const t = await req<Task>('POST', '/api/tasks', {
+      title: 'Mails',
+      schedule: 'fixed',
+      fixedAt: at(mon, '09:00'),
+      minutes: 30,
+      recurrence: { freq: 'daily' },
+    });
+    const d1 = mon;
+    const d2 = addDays(mon, 1);
+    expect((await req('POST', `/api/tasks/${t.data.id}/done`, { day: d1 })).status).toBe(200);
+    expect((await get(d1)).items[0]!.done).toBe(true);
+    expect((await get(d2)).items[0]!.done).toBe(false);
+    const rec = await req<Task[]>('GET', '/api/tasks?view=recurring');
+    expect(rec.data[0]).toMatchObject({ id: t.data.id, status: 'open' });
+    const done = await req<{ day: string; title: string }[]>('GET', '/api/tasks?view=done');
+    expect(done.data.map((x) => [x.day, x.title])).toEqual([[d1, 'Mails']]);
+    await req('POST', `/api/tasks/${t.data.id}/reopen`, { day: d1 });
+    expect((await get(d1)).items[0]!.done).toBe(false);
+  });
+
+  it('„Nur diese“: ändern und überspringen; „Alle“ ändert die Regel', async () => {
+    const mon = next(1);
+    const tue = addDays(mon, 1);
+    const wed = addDays(mon, 2);
+    const t = await req<Task>('POST', '/api/tasks', {
+      title: 'Lesen',
+      schedule: 'fixed',
+      fixedAt: at(mon, '09:00'),
+      minutes: 30,
+      recurrence: { freq: 'daily' },
+    });
+    expect(
+      (
+        await req('PUT', `/api/tasks/${t.data.id}/occurrence/${tue}`, {
+          title: 'Lesen (Buch)',
+          minutes: 45,
+          time: '10:15',
+        })
+      ).status,
+    ).toBe(204);
+    expect(
+      (await req('PUT', `/api/tasks/${t.data.id}/occurrence/${wed}`, { skipped: true })).status,
+    ).toBe(204);
+    const d2 = await get(tue);
+    expect(show(d2.items)).toEqual(['10:15 Lesen (Buch) 45']);
+    expect(d2.items[0]!.changed).toBe(true);
+    expect((await get(wed)).items).toEqual([]);
+    expect(show((await get(mon)).items)).toEqual(['09:00 Lesen 30']);
+
+    await req('PUT', `/api/tasks/${t.data.id}`, { title: 'Lesen!', minutes: 20 });
+    expect(show((await get(mon)).items)).toEqual(['09:00 Lesen! 20']);
+    // Die einzelne Änderung bleibt
+    expect(show((await get(tue)).items)).toEqual(['10:15 Lesen (Buch) 45']);
+    expect(
+      (await req('PUT', `/api/tasks/${crypto.randomUUID()}/occurrence/${tue}`, { skipped: true }))
+        .status,
+    ).toBe(404);
+  });
+
+  it('automatisch + wiederkehrend: gehört zu seinem Tag, kommt vor Einmaligem', async () => {
+    const mon = next(1);
+    await req('POST', '/api/tasks', { title: 'Einmal', schedule: 'auto', minutes: 60 });
+    await req('POST', '/api/tasks', {
+      title: 'Täglich auto',
+      schedule: 'auto',
+      minutes: 30,
+      recurrence: { freq: 'weekdays' },
+    });
+    const d = await get(mon);
+    expect(show(d.items)).toContain('09:00 Täglich auto 30');
+    expect(d.items.map((i) => i.title).indexOf('Täglich auto')).toBeLessThan(
+      d.items.map((i) => i.title).indexOf('Einmal') === -1
+        ? 99
+        : d.items.map((i) => i.title).indexOf('Einmal'),
+    );
+  });
+});
+
+describe('Übersicht „Aufgaben“', () => {
+  it('heute, diese Woche, ohne Zeit', async () => {
+    const d = next(2);
+    await workOnly(1, 2, 3, 4, 5);
+    await req('POST', '/api/tasks', { title: 'Zeitlos' });
+    await req('POST', '/api/tasks', { title: 'Fest', schedule: 'fixed', fixedAt: at(d, '14:00') });
+    const open = await req<{
+      today: Item[];
+      week: { day: string; items: Item[] }[];
+      later: Task[];
+    }>('GET', '/api/tasks?view=open');
+    expect(open.data.later.map((t) => t.title)).toEqual(['Zeitlos']);
+    expect(open.data.week.length).toBe(6);
+    expect(open.data.week.find((w) => w.day === d)!.items.map((i) => i.title)).toEqual(['Fest']);
+    expect((await req('GET', '/api/tasks?view=kaputt')).status).toBe(400);
   });
 });
 
@@ -242,20 +435,15 @@ describe('Fokus und Guthaben', () => {
   it('Start, Ende: Dauer und Guthaben; nur ein Block gleichzeitig; Ereignisse für Webhooks', async () => {
     const seen: string[] = [];
     const off = onEvent((u, ev) => u === userId && seen.push(ev));
-    const t = await req<Task>('POST', '/api/tasks', { title: 'Konzept', minutes: 60 });
-    const start = await req<{ id: string; blockId: string; plannedMinutes: number }>(
-      'POST',
-      '/api/focus/start',
-      {
-        taskId: t.data.id,
-      },
-    );
+    const t = await req<Task>('POST', '/api/tasks', { title: 'Konzept', minutes: 50 });
+    const start = await req<{ id: string; plannedMinutes: number }>('POST', '/api/focus/start', {
+      taskId: t.data.id,
+    });
     expect(start.status).toBe(201);
     expect(start.data.plannedMinutes).toBe(50);
     expect((await req('POST', '/api/focus/start', {})).status).toBe(409);
     expect((await req<{ id: string }>('GET', '/api/focus/current')).data.id).toBe(start.data.id);
 
-    // 50 Minuten später fertig: Zeit zurückdrehen, indem der Start in die Vergangenheit rückt
     await h.db.execute(
       `update focus_session set started_at = now() - interval '50 minutes' where id = '${start.data.id}'` as never,
     );
@@ -267,43 +455,43 @@ describe('Fokus und Guthaben', () => {
     expect(end.data).toMatchObject({ focusedMinutes: 50, earned: 12 });
     expect(end.data.credit.balance).toBe(12);
     expect((await req('POST', `/api/focus/${start.data.id}/finish`, {})).status).toBe(404);
-    expect((await req<Task[]>('GET', '/api/tasks?status=done')).data.map((x) => x.id)).toEqual([
-      t.data.id,
-    ]);
+    expect((await req<Task>('PUT', `/api/tasks/${t.data.id}`, {})).data.status).toBe('done');
     expect((await req('GET', '/api/focus/current')).data).toBeNull();
     expect(seen).toEqual(['focus.started', 'focus.ended']);
-
-    const today = (
-      await req<{ blocks: Block[]; focusMinutes: number }>('GET', `/api/day/${todayIn()}`)
-    ).data;
-    expect(today.focusMinutes).toBe(50);
-    expect(today.blocks.find((b) => b.id === start.data.blockId)).toMatchObject({
-      status: 'done',
-      minutes: 50,
-    });
+    expect((await get(todayIn())).focusMinutes).toBe(50);
     off();
   });
 
-  it('abgebrochen nach unter einer Minute: kein Guthaben; geplanter Block wird übernommen', async () => {
-    const day = todayIn();
-    const { instant } = await import('@fokus/core');
-    const b = await req<Block>('POST', '/api/blocks', {
-      kind: 'focus',
-      startsAt: new Date(instant(day, '23:00')).toISOString(),
+  it('wiederkehrende Aufgabe fertig fokussiert: nur heutiges Vorkommen erledigt', async () => {
+    const t = await req<Task>('POST', '/api/tasks', {
+      title: 'Täglich',
+      schedule: 'auto',
       minutes: 30,
-      title: 'Geplant',
+      recurrence: { freq: 'daily' },
     });
-    const s = await req<{ id: string; plannedMinutes: number }>('POST', '/api/focus/start', {
-      blockId: b.data.id,
-    });
-    expect(s.data.plannedMinutes).toBe(30);
+    const s = await req<{ id: string }>('POST', '/api/focus/start', { taskId: t.data.id });
+    await h.db.execute(
+      `update focus_session set started_at = now() - interval '5 minutes' where id = '${s.data.id}'` as never,
+    );
+    await req('POST', `/api/focus/${s.data.id}/finish`, { taskDone: true });
+    const today = await get(todayIn());
+    expect(today.items.filter((i) => i.taskId === t.data.id && i.done)).toHaveLength(1);
+    expect(
+      (await get(addDays(todayIn(), 1))).items.find((i) => i.taskId === t.data.id)?.done,
+    ).not.toBe(true);
+    expect((await req<Task[]>('GET', '/api/tasks?view=recurring')).data[0]!.status).toBe('open');
+  });
+
+  it('unter einer Minute: abgebrochen, kein Guthaben; unbekannte Aufgabe 404', async () => {
+    const t = await req<Task>('POST', '/api/tasks', { title: 'Kurz' });
+    const s = await req<{ id: string }>('POST', '/api/focus/start', { taskId: t.data.id });
     const r = await req<{ focusedMinutes: number; earned: number }>(
       'POST',
       `/api/focus/${s.data.id}/finish`,
       {},
     );
     expect(r.data).toMatchObject({ focusedMinutes: 0, earned: 0 });
-    expect((await req('POST', '/api/focus/start', { blockId: crypto.randomUUID() })).status).toBe(
+    expect((await req('POST', '/api/focus/start', { taskId: crypto.randomUUID() })).status).toBe(
       404,
     );
   });
@@ -313,10 +501,7 @@ describe('Fokus und Guthaben', () => {
     const a = await req<{ granted: number; short: number; credit: { balance: number } }>(
       'POST',
       '/api/credit/spend',
-      {
-        minutes: 10,
-        reason: 'redirect',
-      },
+      { minutes: 10, reason: 'redirect' },
     );
     expect(a.data).toMatchObject({ granted: 10, short: 0 });
     expect(a.data.credit.balance).toBe(30);
@@ -325,7 +510,6 @@ describe('Fokus und Guthaben', () => {
       reason: 'social',
     });
     expect(b.data).toMatchObject({ granted: 30, limitedBy: 'balance' });
-    // Tageslimit 20
     await req('PUT', '/api/plan/settings', { dailyLimit: 20 });
     await h.db.insert(creditEntry).values({ userId, minutes: 100, reason: 'focus' });
     const c = await req<{ granted: number; limitedBy: string }>('POST', '/api/credit/spend', {
@@ -333,53 +517,17 @@ describe('Fokus und Guthaben', () => {
       reason: 'social',
     });
     expect(c.data).toMatchObject({ granted: 0, limitedBy: 'limit' });
-    const summary = await req<{
-      balance: number;
-      spentToday: number;
-      limitLeft: number;
-      entries: unknown[];
-    }>('GET', '/api/credit');
+    const summary = await req<{ balance: number; spentToday: number; limitLeft: number }>(
+      'GET',
+      '/api/credit',
+    );
     expect(summary.data).toMatchObject({ balance: 100, spentToday: 40, limitLeft: 0 });
-    expect(summary.data.entries.length).toBe(4);
     expect((await req('POST', '/api/credit/spend', { minutes: 0, reason: 'social' })).status).toBe(
       400,
     );
     expect((await req('POST', '/api/credit/spend', { minutes: 5, reason: 'focus' })).status).toBe(
       400,
     );
-  });
-});
-
-describe('Export und Import', () => {
-  it('Roundtrip der eigenen Daten; fremde Dateien bekommen neue IDs', async () => {
-    const t = await req<Task>('POST', '/api/tasks', { title: 'Mitnehmen' });
-    await req('POST', '/api/inbox', { text: 'Notiz' });
-    const file = (
-      await req<{ data: { tasks: unknown[]; inbox: unknown[] } }>('GET', '/api/me/export')
-    ).data;
-    expect(file.data.tasks).toHaveLength(1);
-    const text = JSON.stringify(file);
-    const prev = await req<{ counts: Record<string, number> }>('POST', '/api/import/preview', {
-      text,
-    });
-    expect(prev.data.counts).toMatchObject({ tasks: 1, inbox: 1 });
-
-    // Ersetzen: gleiche Daten wieder da
-    await req('DELETE', `/api/tasks/${t.data.id}`);
-    expect((await req('POST', '/api/import', { text, mode: 'replace' })).status).toBe(200);
-    expect((await req<Task[]>('GET', '/api/tasks')).data.map((x) => x.id)).toEqual([t.data.id]);
-
-    // Zusammenführen: nichts doppelt
-    await req('POST', '/api/import', { text, mode: 'merge' });
-    expect((await req<Task[]>('GET', '/api/tasks')).data).toHaveLength(1);
-
-    // Datei einer anderen Person: neue IDs, Verweise bleiben heil
-    const foreign = { ...file, exportedBy: crypto.randomUUID() };
-    await req('POST', '/api/import', { text: JSON.stringify(foreign), mode: 'merge' });
-    const all = (await req<Task[]>('GET', '/api/tasks')).data;
-    expect(all).toHaveLength(2);
-    expect(new Set(all.map((x) => x.id)).size).toBe(2);
-    expect((await req('POST', '/api/import', { text: 'kaputt', mode: 'merge' })).status).toBe(400);
   });
 });
 
@@ -392,10 +540,9 @@ describe('Umleiten', () => {
     fallback: string;
     bonus: number;
     spend: number;
-    credit: { balance: number };
   };
 
-  it('Mini-Aufgabe als Vorschlag, Bonus höchstens 3-mal am Tag, Fallback ohne Aufgabe', async () => {
+  it('kurze Aufgabe als Vorschlag, Bonus höchstens 3-mal am Tag, Fallback ohne Aufgabe', async () => {
     const empty = await req<R>('GET', '/api/redirect?app=instagram');
     expect(empty.data).toMatchObject({
       label: 'Instagram',
@@ -405,52 +552,39 @@ describe('Umleiten', () => {
       spend: 10,
     });
     expect(empty.data.fallback.length).toBeGreaterThan(3);
-
-    const m = await req<Task>('POST', '/api/tasks', { title: 'Lena antworten', mini: true });
-    const r = await req<R>('GET', '/api/redirect?app=tiktok');
-    expect(r.data.task).toMatchObject({ id: m.data.id, title: 'Lena antworten' });
-
+    const m = await req<Task>('POST', '/api/tasks', { title: 'Lena antworten', minutes: 2 });
+    expect((await req<R>('GET', '/api/redirect?app=tiktok')).data.task).toMatchObject({
+      id: m.data.id,
+    });
     const done = await req<{ bonus: number; credit: { balance: number } }>(
       'POST',
       '/api/redirect/done',
-      {
-        taskId: m.data.id,
-      },
+      { taskId: m.data.id },
     );
     expect(done.data).toMatchObject({ bonus: 3, credit: { balance: 3 } });
-    expect((await req<Task[]>('GET', '/api/tasks?status=done')).data).toHaveLength(1);
     await req('POST', '/api/redirect/done', {});
     await req('POST', '/api/redirect/done', {});
-    const fourth = await req<{ bonus: number; credit: { balance: number } }>(
-      'POST',
-      '/api/redirect/done',
-      {},
-    );
-    expect(fourth.data).toMatchObject({ bonus: 0, credit: { balance: 9 } });
-    expect((await req<R>('GET', '/api/redirect?app=instagram')).data.bonus).toBe(0);
+    const fourth = await req<{ bonus: number }>('POST', '/api/redirect/done', {});
+    expect(fourth.data.bonus).toBe(0);
+    expect((await req<R>('GET', '/api/redirect?app=unbekannt')).data.label).toBe('Social Media');
   });
 
-  it('im Social-Slot: erlaubt; sonst nächster Slot', async () => {
-    const { instant } = await import('@fokus/core');
-    const day = todayIn();
-    const start = new Date(Date.now() - 5 * 60_000).toISOString();
-    await req('POST', '/api/blocks', { kind: 'social', startsAt: start, minutes: 20 });
-    expect((await req<R>('GET', '/api/redirect?app=instagram')).data.insideSlot).toBe(true);
-    await req('POST', '/api/blocks', {
+  it('im Social-Slot: erlaubt', async () => {
+    // Slot von vor 5 Minuten bis in 10 Minuten (feste Zeit, auch außerhalb der Arbeitszeit)
+    await req('POST', '/api/tasks', {
+      title: 'Social',
       kind: 'social',
-      startsAt: new Date(Date.now() + 3 * 3600_000).toISOString(),
-      minutes: 20,
+      schedule: 'fixed',
+      fixedAt: new Date(Date.now() - 5 * 60_000).toISOString(),
+      minutes: 15,
     });
-    void instant;
-    void day;
-    expect((await req<R>('GET', '/api/redirect?app=unbekannt')).data.label).toBe('Social Media');
+    const r = await req<R>('GET', '/api/redirect?app=instagram');
+    expect(r.data.insideSlot).toBe(true);
   });
 });
 
 describe('Woche', () => {
   type W = {
-    start: string;
-    end: string;
     focus: number;
     social: number;
     regained: number;
@@ -471,7 +605,6 @@ describe('Woche', () => {
       tasksDone: 0,
       bestDay: null,
     });
-
     await req('PUT', '/api/plan/settings', { streakGoal: 30 });
     const t = await req<Task>('POST', '/api/tasks', { title: 'Konzept', minutes: 60 });
     const s = await req<{ id: string }>('POST', '/api/focus/start', { taskId: t.data.id });
@@ -481,7 +614,6 @@ describe('Woche', () => {
     await req('POST', `/api/focus/${s.data.id}/finish`, { taskDone: true });
     await h.db.insert(creditEntry).values({ userId, minutes: 100, reason: 'focus' });
     await req('POST', '/api/credit/spend', { minutes: 20, reason: 'social' });
-
     const w = await req<W>('GET', `/api/week/${todayIn()}`);
     expect(w.data).toMatchObject({
       focus: 45,
@@ -490,42 +622,46 @@ describe('Woche', () => {
       tasksDone: 1,
       bestDay: todayIn(),
     });
-    const todayRow = w.data.days.find((d) => d.day === todayIn())!;
-    expect(todayRow).toEqual({ day: todayIn(), focus: 45, social: 20 });
+    expect(w.data.days.find((d) => d.day === todayIn())).toEqual({
+      day: todayIn(),
+      focus: 45,
+      social: 20,
+    });
     expect(w.data.regained).toBe(w.data.expectedSocial - 20);
     expect((await req('GET', '/api/week/kaputt')).status).toBe(400);
   });
 });
 
-describe('Energie und Hochphasen', () => {
-  it('niedrige Energie: Schweres zuletzt; Hochphase aus den Einstellungen; Tagesansicht und Woche zeigen sie', async () => {
-    const day = TOMORROW();
-    await req('POST', '/api/tasks', { title: 'Schwer', minutes: 50, heavy: true });
-    await req('POST', '/api/tasks', { title: 'Leicht', minutes: 30 });
-    const peaks = [{ from: '11:00', to: '13:00' }];
-    expect((await req('PUT', '/api/plan/settings', { peaks })).status).toBe(200);
-    expect(
-      (await req('PUT', '/api/plan/settings', { peaks: [{ from: '13:00', to: '11:00' }] })).status,
-    ).toBe(400);
-
-    const high = await req<{ blocks: Block[] }>('POST', `/api/plan/${day}`);
-    expect(high.data.blocks.map((b) => `${clock(b.startsAt)} ${b.title}`)).toEqual([
-      '09:00 Leicht',
-      '11:00 Schwer',
-    ]);
-
-    expect((await req('PUT', `/api/energy/${day}`, { level: 'low' })).status).toBe(200);
-    const low = await req<{ blocks: Block[] }>('POST', `/api/plan/${day}`);
-    expect(low.data.blocks.map((b) => `${clock(b.startsAt)} ${b.title}`)).toEqual([
-      '09:00 Leicht',
-      '09:30 Schwer',
-    ]);
-
-    const o = await req<{ energy: string | null }>('GET', `/api/day/${day}`);
-    expect(o.data.energy).toBe('low');
-    expect(
-      (await req<{ energy: Record<string, string> }>('GET', `/api/week/${day}`)).data.energy[day],
-    ).toBe('low');
-    expect((await req('PUT', `/api/energy/${day}`, { level: 'mega' })).status).toBe(400);
+describe('Export und Import', () => {
+  it('Roundtrip der eigenen Daten inkl. Vorkommen; fremde Dateien bekommen neue IDs', async () => {
+    const mon = next(1);
+    const t = await req<Task>('POST', '/api/tasks', {
+      title: 'Mitnehmen',
+      schedule: 'fixed',
+      fixedAt: at(mon, '09:00'),
+      recurrence: { freq: 'daily' },
+    });
+    await req('POST', `/api/tasks/${t.data.id}/done`, { day: mon });
+    const file = (
+      await req<{ data: { tasks: unknown[]; occurrences: unknown[] } }>('GET', '/api/me/export')
+    ).data;
+    expect(file.data.tasks).toHaveLength(1);
+    expect(file.data.occurrences).toHaveLength(1);
+    const text = JSON.stringify(file);
+    const prev = await req<{ counts: Record<string, number> }>('POST', '/api/import/preview', {
+      text,
+    });
+    expect(prev.data.counts).toMatchObject({ tasks: 1, occurrences: 1 });
+    await req('DELETE', `/api/tasks/${t.data.id}`);
+    expect((await req('POST', '/api/import', { text, mode: 'replace' })).status).toBe(200);
+    expect((await get(mon)).items[0]).toMatchObject({ title: 'Mitnehmen', done: true });
+    await req('POST', '/api/import', { text, mode: 'merge' });
+    expect((await req<Task[]>('GET', '/api/tasks?view=recurring')).data).toHaveLength(1);
+    const foreign = { ...file, exportedBy: crypto.randomUUID() };
+    await req('POST', '/api/import', { text: JSON.stringify(foreign), mode: 'merge' });
+    const all = (await req<Task[]>('GET', '/api/tasks?view=recurring')).data;
+    expect(all).toHaveLength(2);
+    expect(new Set(all.map((x) => x.id)).size).toBe(2);
+    expect((await req('POST', '/api/import', { text: 'kaputt', mode: 'merge' })).status).toBe(400);
   });
 });

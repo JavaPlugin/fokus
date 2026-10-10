@@ -11,7 +11,7 @@ import {
   type CreditEntry,
   type Day,
 } from '@fokus/core';
-import { creditEntry, energyDay, focusSession, task, withUser, type Db } from '@fokus/db';
+import { creditEntry, focusSession, task, withUser, type Db } from '@fokus/db';
 import { and, eq, gte, lt } from 'drizzle-orm';
 import type { Hono } from 'hono';
 import type { Vars } from './app';
@@ -58,14 +58,6 @@ export function registerWeekRoutes(app: Hono<Vars>, { db }: { db: Db }) {
         .select({ id: task.id })
         .from(task)
         .where(and(eq(task.status, 'done'), gte(task.doneAt, from), lt(task.doneAt, to)));
-      const energy = Object.fromEntries(
-        (
-          await tx
-            .select()
-            .from(energyDay)
-            .where(and(gte(energyDay.day, start), lt(energyDay.day, addDays(start, 7))))
-        ).map((e) => [e.day, e.level]),
-      );
       const summary = weekSummary(totals, start, today, settings.baselineScroll);
       return {
         ...summary,
@@ -74,7 +66,6 @@ export function registerWeekRoutes(app: Hono<Vars>, { db }: { db: Db }) {
         streakGoal: settings.streakGoal,
         baselineScroll: settings.baselineScroll,
         tasksDone: done.length,
-        energy,
       };
     });
     return c.json(out);

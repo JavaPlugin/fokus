@@ -1,4 +1,4 @@
-import { addDays, clock, dayInZone, todayIn } from '@fokus/core';
+import { addDays, clock, dayInZone, todayIn, weekday } from '@fokus/core';
 import { createDb, type DbHandle } from '@fokus/db';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from './app';
@@ -85,14 +85,7 @@ beforeEach(async () => {
 });
 afterEach(() => h.close());
 
-type Block = {
-  id: string;
-  kind: string;
-  startsAt: string;
-  minutes: number;
-  title: string;
-  source: string;
-};
+type Item = { kind: string; start: string; minutes: number; title: string };
 const day = () => addDays(todayIn(), 1);
 
 describe('Kalender-Abo', () => {
@@ -115,26 +108,31 @@ describe('Kalender-Abo', () => {
     expect(JSON.stringify((await req('GET', '/api/calendar')).data)).not.toContain('geheim');
     expect(fetched[0]).toBe('https://cal.example/privat.ics?key=geheim');
 
-    const o = await req<{ blocks: Block[] }>('GET', `/api/day/${day()}`);
-    expect(
-      o.data.blocks.map((b) => `${clock(b.startsAt)} ${b.kind} ${b.minutes} ${b.title}`),
-    ).toEqual(['09:30 event 60 Zahnarzt', '14:00 event 30 Call']);
-
-    // Plan läuft um Termine herum
-    await req('POST', '/api/tasks', { title: 'Konzept', minutes: 60 });
-    const plan = await req<{ blocks: Block[] }>('POST', `/api/plan/${day()}`);
-    expect(plan.data.blocks.map((b) => `${clock(b.startsAt)} ${b.minutes}`)).toEqual([
-      '09:00 30',
-      '10:30 30',
+    const o = await req<{ items: Item[] }>('GET', `/api/day/${day()}`);
+    expect(o.data.items.map((b) => `${clock(b.start)} ${b.kind} ${b.minutes} ${b.title}`)).toEqual([
+      '09:30 event 60 Zahnarzt',
+      '14:00 event 30 Call',
     ]);
+
+    // Die automatische Aufgabe weicht den Terminen aus
+    await req('PUT', '/api/plan/settings', {
+      week: Array.from({ length: 7 }, (_, i) =>
+        i === weekday(day()) ? { from: '09:00', to: '17:00' } : null,
+      ),
+    });
+    await req('POST', '/api/tasks', { title: 'Konzept', schedule: 'auto', minutes: 60 });
+    const plan = await req<{ items: Item[] }>('GET', `/api/day/${day()}`);
+    expect(
+      plan.data.items.filter((i) => i.kind === 'work').map((b) => `${clock(b.start)} ${b.minutes}`),
+    ).toEqual(['10:30 60']);
 
     // Kalender ändert sich: Zahnarzt weg, Call später; Abgleich ersetzt (kein Doppeltes)
     ics = wrap(calendar('b', day(), '1500', '1530', 'Call'));
     const sync = await req<{ synced: number }>('POST', '/api/calendar/sync?force=1');
     expect(sync.data.synced).toBe(1);
-    const after = await req<{ blocks: Block[] }>('GET', `/api/day/${day()}`);
-    const events = after.data.blocks.filter((b) => b.kind === 'event');
-    expect(events.map((b) => `${clock(b.startsAt)} ${b.title}`)).toEqual(['15:00 Call']);
+    const after = await req<{ items: Item[] }>('GET', `/api/day/${day()}`);
+    const events = after.data.items.filter((b) => b.kind === 'event');
+    expect(events.map((b) => `${clock(b.start)} ${b.title}`)).toEqual(['15:00 Call']);
 
     // Pause: ohne force kein neuer Abruf
     const n = fetched.length;
@@ -143,8 +141,8 @@ describe('Kalender-Abo', () => {
 
     // Abo löschen nimmt die Termine mit
     expect((await req('DELETE', `/api/calendar/${add.data.id}`)).status).toBe(204);
-    const gone = await req<{ blocks: Block[] }>('GET', `/api/day/${day()}`);
-    expect(gone.data.blocks.filter((b) => b.kind === 'event')).toEqual([]);
+    const gone = await req<{ items: Item[] }>('GET', `/api/day/${day()}`);
+    expect(gone.data.items.filter((b) => b.kind === 'event')).toEqual([]);
     expect(dayInZone(new Date())).toBe(todayIn());
   });
 

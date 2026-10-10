@@ -2,6 +2,7 @@ export * from './money';
 export * from './dates';
 export * from './markdown';
 export * from './model';
+export * from './recurrence';
 export * from './credit';
 export * from './plan';
 export * from './gaps';

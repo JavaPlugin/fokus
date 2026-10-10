@@ -1,5 +1,5 @@
 import { instant } from '@fokus/core';
-import { createDb, creditEntry, focusSession, timeBlock, user, type DbHandle } from '@fokus/db';
+import { createDb, creditEntry, focusSession, task, user, type DbHandle } from '@fokus/db';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Mail } from './mail';
 import { createNotifier } from './notify';
@@ -40,18 +40,18 @@ function setup() {
 const DAY = '2026-10-12';
 
 describe('Erinnerungen', () => {
-  it('kurz vor Fokus-Block und Social-Slot, einmal je Block, nicht davor oder danach', async () => {
+  it('kurz vor Arbeit und Social-Zeit, einmal je Aufgabe, nicht davor oder danach (Pause nie)', async () => {
     const { notifier, r } = setup();
-    await h.db.insert(timeBlock).values([
-      {
-        userId: a,
-        kind: 'focus',
-        startsAt: new Date(instant(DAY, '10:00')),
-        minutes: 50,
-        title: 'Angebot',
-      },
-      { userId: a, kind: 'social', startsAt: new Date(instant(DAY, '18:00')), minutes: 20 },
-      { userId: a, kind: 'pause', startsAt: new Date(instant(DAY, '10:50')), minutes: 10 },
+    const fixed = (hhmm: string) => ({
+      userId: a,
+      schedule: 'fixed' as const,
+      fixedAt: new Date(instant(DAY, hhmm)),
+      anchor: DAY,
+    });
+    await h.db.insert(task).values([
+      { ...fixed('10:00'), kind: 'work', minutes: 50, title: 'Angebot' },
+      { ...fixed('18:00'), kind: 'social', minutes: 20, title: 'Social-Slot' },
+      { ...fixed('10:50'), kind: 'pause', minutes: 10, title: 'Pause' },
     ]);
     // E-Mail statt Push, damit die Mail zu sehen ist
     await notifier.send(a, 'test', {

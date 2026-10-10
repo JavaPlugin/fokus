@@ -1,20 +1,21 @@
-// Gemeinsame Helfer für Aufgaben, Zeitblöcke, Plan und Guthaben (nur innerhalb von withUser).
+// Gemeinsame Helfer für Aufgaben, Tagesplan und Guthaben (nur innerhalb von withUser).
 import {
   DEFAULT_SETTINGS,
   addDays,
+  dayInZone,
   instant,
   type CreditEntry,
   type Day,
   type PlanSettings,
-  type TaskLite,
+  type Recurrence,
 } from '@fokus/core';
 import { creditEntry, task, timeBlock, userSettings, type Db } from '@fokus/db';
 import type { Context } from 'hono';
 import { z } from 'zod';
 import type { SessionUser, Vars } from './app';
 
-type TaskRow = typeof task.$inferSelect;
-type BlockRow = typeof timeBlock.$inferSelect;
+export type TaskRow = typeof task.$inferSelect;
+export type EventRow = typeof timeBlock.$inferSelect;
 
 export const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Ungültiger Tag.');
 export const hhmm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Ungültige Uhrzeit.');
@@ -23,40 +24,33 @@ export const uuid = z.uuid();
 /** Einstellungen: Standardwerte aus dem Kern, darüber die eigenen. */
 export async function loadSettings(tx: Db): Promise<PlanSettings> {
   const [row] = await tx.select({ p: userSettings.plan }).from(userSettings);
-  return { ...DEFAULT_SETTINGS, ...(row?.p ?? {}) };
+  const own = (row?.p ?? {}) as Partial<PlanSettings>;
+  return { ...DEFAULT_SETTINGS, ...own, week: own.week ?? DEFAULT_SETTINGS.week };
 }
 
+/** Aufgabe für die Oberfläche. */
 export const taskOut = (t: TaskRow) => ({
   id: t.id,
   title: t.title,
+  kind: t.kind,
   minutes: t.minutes,
-  heavy: t.heavy,
-  mini: t.mini,
+  schedule: t.schedule,
+  fixedAt: t.fixedAt?.toISOString() ?? null,
   due: t.due,
+  recurrence: (t.recurrence ?? null) as Recurrence | null,
+  anchor: t.anchor,
   status: t.status,
   doneAt: t.doneAt?.toISOString() ?? null,
   note: t.note,
   createdAt: t.createdAt.toISOString(),
 });
 
-export const blockOut = (b: BlockRow) => ({
+/** Kalender-Termin (Abo) für die Oberfläche. */
+export const eventOut = (b: EventRow) => ({
   id: b.id,
-  kind: b.kind,
   startsAt: b.startsAt.toISOString(),
   minutes: b.minutes,
   title: b.title,
-  taskId: b.taskId,
-  status: b.status,
-  source: b.source,
-});
-
-export const lite = (t: TaskRow): TaskLite => ({
-  id: t.id,
-  title: t.title,
-  minutes: t.minutes,
-  heavy: t.heavy,
-  mini: t.mini,
-  due: t.due,
 });
 
 /** Buch des Guthabens im Format des Kerns. */
@@ -70,6 +64,10 @@ export const dayRange = (d: Day) => ({
   from: new Date(instant(d, '00:00')),
   to: new Date(instant(addDays(d, 1), '00:00')),
 });
+
+/** Anker einer Aufgabe: Tag der festen Zeit, sonst heute. */
+export const anchorOf = (fixedAt: Date | null, today: Day): Day =>
+  fixedAt ? dayInZone(fixedAt) : today;
 
 export function authed(c: Context<Vars>): SessionUser | Response {
   const u = c.get('user');
