@@ -2,9 +2,12 @@ import { eq, sql } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import {
   apiKey,
+  creditEntry,
   createDb,
   notificationLog,
   pushSubscription,
+  task,
+  timeBlock,
   user,
   userSettings,
   webhook,
@@ -155,7 +158,40 @@ describe('Jede Tabelle mit Nutzerdaten hat RLS', () => {
     const auth = ['account', 'passkey', 'session'];
     const without = rows.filter((r) => !(r.rls && r.force)).map((r) => r.name);
     expect(without).toEqual(auth);
-    expect(rows.length).toBeGreaterThanOrEqual(9);
+    expect(rows.length).toBeGreaterThanOrEqual(14);
+    await h.close();
+  });
+});
+
+describe('Aufgaben und Zeitblöcke', () => {
+  it('jeder sieht nur seine, auch über Verweise nicht', async () => {
+    const { h, a, b } = await twoUsers();
+    const t = await withUser(h.db, a, (tx) =>
+      tx.insert(task).values({ userId: a, title: 'Geheim-A' }).returning({ id: task.id }),
+    );
+    const taskId = t[0]!.id;
+    await withUser(h.db, a, (tx) =>
+      tx.insert(timeBlock).values({
+        userId: a,
+        kind: 'focus',
+        startsAt: new Date(),
+        minutes: 50,
+        taskId,
+      }),
+    );
+    for (const table of [task, timeBlock])
+      expect(await withUser(h.db, b, (tx) => tx.select().from(table))).toEqual([]);
+    // B kann nichts auf As Aufgabe anlegen oder ändern
+    await expect(
+      withUser(h.db, b, (tx) =>
+        tx.insert(creditEntry).values({ userId: a, minutes: 5, reason: 'focus' }),
+      ),
+    ).rejects.toThrow();
+    const changed = await withUser(h.db, b, (tx) =>
+      tx.update(task).set({ title: 'gehackt' }).returning(),
+    );
+    expect(changed).toEqual([]);
+    expect((await withUser(h.db, a, (tx) => tx.select().from(task)))[0]!.title).toBe('Geheim-A');
     await h.close();
   });
 });

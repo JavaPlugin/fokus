@@ -2,8 +2,8 @@
 // Updates und Backups führt der Updater aus. Die API reicht nur weiter und fügt das Secret an,
 // der Browser spricht nie direkt mit dem Updater.
 
-import { appSettings, session, user, withAdmin, type Db } from '@fokus/db';
-import { eq, max, sql } from 'drizzle-orm';
+import { appSettings, session, task, user, withAdmin, type Db } from '@fokus/db';
+import { count, eq, max, sql } from 'drizzle-orm';
 import type { Context, Hono } from 'hono';
 import { z } from 'zod';
 import type { Vars } from './app';
@@ -81,8 +81,8 @@ export function registerAdmin(
 
   // Nutzungsübersicht: nur Zählwerte je Nutzer (Aufgaben, letzte Anmeldung), nie Inhalte
   app.get('/api/admin/usage', async (c) => {
-    const counts = await withAdmin(db, async () => ({
-      tasks: [] as { userId: string; n: number }[],
+    const counts = await withAdmin(db, async (tx) => ({
+      tasks: await tx.select({ userId: task.userId, n: count() }).from(task).groupBy(task.userId),
     }));
     const seen = await db
       .select({ userId: session.userId, at: max(session.updatedAt) })

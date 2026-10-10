@@ -84,14 +84,41 @@ describe('Mandantentrennung', () => {
       url: 'https://hook.example/a',
       events: ['focus.started'],
     });
+    const task = await json<{ id: string }>('POST', '/api/tasks', a, { title: 'Geheim-A Aufgabe' });
+    const note = await json<{ id: string }>('POST', '/api/inbox', a, { text: 'Geheim-A Notiz' });
+    const block = await json<{ id: string }>('POST', '/api/blocks', a, {
+      kind: 'social',
+      startsAt: new Date().toISOString(),
+      minutes: 20,
+      title: 'Geheim-A Slot',
+    });
+    const session = await json<{ id: string }>('POST', '/api/focus/start', a, {
+      taskId: task.id,
+    });
     const keysBefore = (await req('GET', '/api/me/keys', a)).text;
     const hooksBefore = (await req('GET', '/api/me/webhooks', a)).text;
-    const ids = [key.keys[0]!.id, hook.webhooks[0]!.id];
+    const ids = [key.keys[0]!.id, hook.webhooks[0]!.id, task.id, note.id, block.id, session.id];
+    const today = new Date().toISOString().slice(0, 10);
 
     const attacks: [string, string, unknown?][] = [
       ['DELETE', `/api/me/keys/${ids[0]}`],
       ['DELETE', `/api/me/webhooks/${ids[1]}`],
       ['POST', `/api/me/webhooks/${ids[1]}/test`],
+      ['PUT', `/api/tasks/${task.id}`, { title: 'Gekapert' }],
+      ['POST', `/api/tasks/${task.id}/done`],
+      ['DELETE', `/api/tasks/${task.id}`],
+      ['POST', `/api/inbox/${note.id}/plan`, {}],
+      ['DELETE', `/api/inbox/${note.id}`],
+      ['PUT', `/api/blocks/${block.id}`, { title: 'Gekapert' }],
+      ['DELETE', `/api/blocks/${block.id}`],
+      [
+        'POST',
+        `/api/blocks`,
+        { kind: 'focus', startsAt: new Date().toISOString(), minutes: 25, taskId: task.id },
+      ],
+      ['POST', `/api/focus/start`, { taskId: task.id }],
+      ['POST', `/api/focus/start`, { blockId: block.id }],
+      ['POST', `/api/focus/${session.id}/finish`, {}],
     ];
     for (const [method, path, body] of attacks) {
       const r = await req(method, path, b, body);
@@ -101,7 +128,17 @@ describe('Mandantentrennung', () => {
     }
 
     // Was B liest, enthält nichts von A
-    const reads = ['/api/me/keys', '/api/me/webhooks', '/api/me/export', '/api/notify'];
+    const reads = [
+      '/api/me/keys',
+      '/api/me/webhooks',
+      '/api/me/export',
+      '/api/notify',
+      '/api/tasks?status=all',
+      '/api/inbox',
+      `/api/day/${today}`,
+      '/api/credit',
+      '/api/focus/current',
+    ];
     for (const path of reads) {
       const r = await req('GET', path, b);
       expect(r.text, path).not.toMatch(/Geheim-A/);
@@ -117,6 +154,8 @@ describe('Mandantentrennung', () => {
     expect((await req('GET', '/api/admin/usage', b)).status).toBe(403);
 
     // As Daten unverändert
+    expect((await req('GET', '/api/tasks?status=all', a)).text).toContain('Geheim-A Aufgabe');
+    expect((await req('GET', '/api/focus/current', a)).text).toContain(session.id);
     expect((await req('GET', '/api/me/keys', a)).text).toBe(keysBefore);
     expect((await req('GET', '/api/me/webhooks', a)).text).toBe(hooksBefore);
   });

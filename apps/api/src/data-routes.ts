@@ -5,7 +5,16 @@
 // Neue Fachtabellen (user_id) gehören in EXPORT_TABLES, und zwar nach den Tabellen, auf die sie zeigen.
 import { createHash } from 'node:crypto';
 import { todayIn } from '@fokus/core';
-import { userSettings, withUser, type Db } from '@fokus/db';
+import {
+  creditEntry,
+  focusSession,
+  inboxItem,
+  task,
+  timeBlock,
+  userSettings,
+  withUser,
+  type Db,
+} from '@fokus/db';
 import { getTableColumns, type Table } from 'drizzle-orm';
 import type { PgTable } from 'drizzle-orm/pg-core';
 import type { Context, Hono } from 'hono';
@@ -27,7 +36,14 @@ export interface ExportTable {
 }
 
 /** Reihenfolge = Einfügereihenfolge (Verweise zeigen auf frühere Tabellen). */
-export const EXPORT_TABLES: ExportTable[] = [{ key: 'settings', table: userSettings }];
+export const EXPORT_TABLES: ExportTable[] = [
+  { key: 'settings', table: userSettings },
+  { key: 'tasks', table: task, ids: ['id'] },
+  { key: 'inbox', table: inboxItem, ids: ['id'], refs: ['taskId'] },
+  { key: 'blocks', table: timeBlock, ids: ['id'], refs: ['taskId'] },
+  { key: 'sessions', table: focusSession, ids: ['id'], refs: ['blockId', 'taskId'] },
+  { key: 'credit', table: creditEntry, ids: ['id'], refs: ['sessionId', 'blockId'] },
+];
 
 export interface ExportFile {
   format: typeof EXPORT_FORMAT;

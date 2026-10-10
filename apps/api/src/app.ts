@@ -14,6 +14,8 @@ import { registerApiKeyRoutes } from './api-keys';
 import { createWebhooks, registerWebhookRoutes, type Resolve } from './webhooks';
 import { registerDataRoutes } from './data-routes';
 import { registerSettingsRoutes } from './settings-routes';
+import { registerTaskRoutes } from './task-routes';
+import { registerDayRoutes } from './day-routes';
 import { createPush, type PushSend } from './push';
 import { createMailer, e2eOutbox, type Mailer } from './mail';
 import { loadEmailTemplates, registerEmailTemplateRoutes } from './email-templates';
@@ -383,6 +385,8 @@ export function createApp({
   registerEmailTemplateRoutes(app, { db, mailer: mail, publicUrl: env.PUBLIC_URL });
   registerDataRoutes(app, { db });
   registerSettingsRoutes(app, { db });
+  registerTaskRoutes(app, { db });
+  registerDayRoutes(app, { db });
   registerApiKeyRoutes(app, { db });
   registerWebhookRoutes(app, { db, hooks, resolve: webhookResolve });
 

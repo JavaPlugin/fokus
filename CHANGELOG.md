@@ -4,6 +4,14 @@ Alle Versionen von FOKUS. Installiert wird über Admin-Panel → System (Tag `vX
 
 ## Unveröffentlicht
 
+### Phase 1: Kern
+
+- Aufgaben, Inbox, Zeitblöcke (Fokus, Pause, Social, Termin), Tagesplan, Fokus-Timer-Durchgänge und Scroll-Guthaben (1 Std. Fokus = 15 Min., einstellbar, mit Tageslimit) in Kern, Datenbank und API.
+- Tagesplan verteilt Aufgaben in freie Zeit, schneidet sie in Fokus-Blöcke mit Pausen, legt schwere Aufgaben in Hochphasen und lässt Mini-Aufgaben für Lücken und „Umleiten“ übrig.
+- Lücken-Füller, Serie und Wochen-Zeit-Konto als reine Funktionen mit Tests.
+- Notizen per Kurzbefehl in die Inbox (`/api/v1/inbox`).
+- Export/Import enthält alle neuen Daten.
+
 ### Phase 0: Fundament
 
 - Monorepo (pnpm + Turbo), CI, Release mit cosign-Signatur (neues Schlüsselpaar), Compose, Installer, Updater mit Rollback und Backups.

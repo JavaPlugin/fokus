@@ -2,6 +2,7 @@
 // (Migration 0001_rls). Zugriff aus der API nur über withUser().
 import {
   boolean,
+  date,
   index,
   integer,
   jsonb,
@@ -31,11 +32,116 @@ export const userSettings = pgTable('user_settings', {
     social: boolean;
     recap: boolean;
   }>(),
+  /** Planung: eigene Werte über den Standardwerten aus packages/core (PlanSettings). */
+  plan: jsonb('plan').$type<{
+    focusMinutes?: number;
+    pauseMinutes?: number;
+    creditPerHour?: number;
+    dailyLimit?: number;
+    workStart?: string;
+    workEnd?: string;
+    baselineScroll?: number;
+    streakGoal?: number;
+  }>(),
   updatedAt: timestamp('updated_at', { withTimezone: true })
     .notNull()
     .defaultNow()
     .$onUpdate(() => new Date()),
 });
+
+/** Aufgabe. Dauer in ganzen Minuten; `mini` = 2-Minuten-Aufgabe für Lücken und „Umleiten“. */
+export const task = pgTable(
+  'task',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: owner(),
+    title: text('title').notNull(),
+    minutes: integer('minutes').notNull().default(25),
+    heavy: boolean('heavy').notNull().default(false),
+    mini: boolean('mini').notNull().default(false),
+    due: date('due', { mode: 'string' }),
+    status: text('status', { enum: ['open', 'done'] })
+      .notNull()
+      .default('open'),
+    doneAt: timestamp('done_at', { withTimezone: true, mode: 'date' }),
+    note: text('note').notNull().default(''),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+  },
+  (t) => [index('task_user_status').on(t.userId, t.status)],
+);
+
+/** Zeitblock im Kalender: Fokus, Pause, Social-Slot oder Termin. */
+export const timeBlock = pgTable(
+  'time_block',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: owner(),
+    kind: text('kind', { enum: ['focus', 'pause', 'social', 'event'] }).notNull(),
+    startsAt: timestamp('starts_at', { withTimezone: true, mode: 'date' }).notNull(),
+    minutes: integer('minutes').notNull(),
+    title: text('title').notNull().default(''),
+    taskId: uuid('task_id').references(() => task.id, { onDelete: 'set null' }),
+    status: text('status', { enum: ['planned', 'running', 'done', 'skipped'] })
+      .notNull()
+      .default('planned'),
+    /** plan = von der Planung erzeugt (wird beim Neuplanen ersetzt), manual = selbst angelegt */
+    source: text('source', { enum: ['plan', 'manual', 'calendar'] })
+      .notNull()
+      .default('manual'),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+  },
+  (t) => [index('time_block_user_start').on(t.userId, t.startsAt)],
+);
+
+/** Ein Fokus-Durchgang (Timer). `focusedMinutes` = tatsächlich gearbeitet. */
+export const focusSession = pgTable(
+  'focus_session',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: owner(),
+    blockId: uuid('block_id').references(() => timeBlock.id, { onDelete: 'set null' }),
+    taskId: uuid('task_id').references(() => task.id, { onDelete: 'set null' }),
+    startedAt: timestamp('started_at', { withTimezone: true, mode: 'date' }).notNull(),
+    endedAt: timestamp('ended_at', { withTimezone: true, mode: 'date' }),
+    plannedMinutes: integer('planned_minutes').notNull(),
+    focusedMinutes: integer('focused_minutes').notNull().default(0),
+    status: text('status', { enum: ['running', 'done', 'abandoned'] })
+      .notNull()
+      .default('running'),
+  },
+  (t) => [index('focus_session_user_start').on(t.userId, t.startedAt)],
+);
+
+/** Scroll-Guthaben als Buch: Plus = verdient, Minus = ausgegeben. */
+export const creditEntry = pgTable(
+  'credit_entry',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: owner(),
+    at: timestamp('at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+    minutes: integer('minutes').notNull(),
+    reason: text('reason', { enum: ['focus', 'social', 'redirect', 'adjust'] }).notNull(),
+    sessionId: uuid('session_id').references(() => focusSession.id, { onDelete: 'set null' }),
+    blockId: uuid('block_id').references(() => timeBlock.id, { onDelete: 'set null' }),
+  },
+  (t) => [index('credit_entry_user_at').on(t.userId, t.at)],
+);
+
+/** Schnell notiert, FOKUS plant später ein (wird zur Aufgabe). */
+export const inboxItem = pgTable(
+  'inbox_item',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: owner(),
+    text: text('text').notNull(),
+    status: text('status', { enum: ['open', 'planned', 'dismissed'] })
+      .notNull()
+      .default('open'),
+    taskId: uuid('task_id').references(() => task.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+  },
+  (t) => [index('inbox_item_user_status').on(t.userId, t.status)],
+);
 
 /** Web-Push-Abos (ein Gerät = ein Abo; meldet sich jemand anderes auf dem Gerät an, bekommt er ein eigenes). */
 export const pushSubscription = pgTable(

@@ -15,6 +15,20 @@
       "when": 1791622325927,
       "tag": "0001_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791623413416,
+      "tag": "0002_tasks",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1791623413944,
+      "tag": "0003_tasks_rls",
+      "breakpoints": true
     }
   ]
 }

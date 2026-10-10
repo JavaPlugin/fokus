@@ -56,3 +56,66 @@ export function todayIn(timeZone = 'Europe/Berlin', now = new Date()): Day {
   }).format(now);
   return parts; // en-CA liefert YYYY-MM-DD
 }
+
+// ---------- Uhrzeiten ----------
+// Zeitpunkte sind ISO-Texte (UTC) bzw. Millisekunden; der Planungstag ist ein Kalendertag in
+// Europe/Berlin. Dauer immer in ganzen Minuten.
+
+export const MIN_MS = 60_000;
+export const TIME_ZONE = 'Europe/Berlin';
+
+/** Versatz der Zeitzone zu UTC in Millisekunden zum Zeitpunkt `utc` (lokal = utc + Versatz). */
+function offsetMs(utc: number, timeZone: string): number {
+  const p = Object.fromEntries(
+    new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      hourCycle: 'h23',
+      year: 'numeric',
+      month: 'numeric',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: 'numeric',
+      second: 'numeric',
+    })
+      .formatToParts(new Date(utc))
+      .map((x) => [x.type, +x.value]),
+  ) as Record<string, number>;
+  return (
+    Date.UTC(p.year!, p.month! - 1, p.day!, p.hour!, p.minute!, p.second!) -
+    Math.floor(utc / 1000) * 1000
+  );
+}
+
+/** Zeitpunkt (ms) für „Tag + Uhrzeit HH:MM“ in der Zeitzone (Sommerzeit inklusive). */
+export function instant(day: Day, hhmm: string, timeZone = TIME_ZONE): number {
+  const [h, m] = hhmm.split(':').map(Number) as [number, number];
+  const guess = Date.UTC(yearOf(day), monthOf(day) - 1, dateOf(day), h, m);
+  let t = guess - offsetMs(guess, timeZone);
+  const again = offsetMs(t, timeZone);
+  t = guess - again;
+  return t;
+}
+
+/** ISO-Text eines Zeitpunkts (ms). */
+export const isoOf = (ms: number): string => new Date(ms).toISOString();
+
+/** Kalendertag eines Zeitpunkts in der Zeitzone. */
+export const dayInZone = (at: string | number, timeZone = TIME_ZONE): Day =>
+  todayIn(timeZone, new Date(at));
+
+/** „09:30“ eines Zeitpunkts in der Zeitzone. */
+export function clock(at: string | number, timeZone = TIME_ZONE): string {
+  return new Intl.DateTimeFormat('de-DE', {
+    timeZone,
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).format(new Date(at));
+}
+
+/** Minuten von a bis b (ganze Minuten, abgerundet). */
+export const minutesBetween = (a: string | number | Date, b: string | number | Date): number =>
+  Math.floor((new Date(b).getTime() - new Date(a).getTime()) / MIN_MS);
+
+/** Montag der Woche, in der `d` liegt. */
+export const weekStart = (d: Day): Day => addDays(d, -((weekday(d) + 6) % 7));
