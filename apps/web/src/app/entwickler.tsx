@@ -138,6 +138,12 @@ export default function Entwickler() {
           Webhooks melden Beginn und Ende eines Fokus-Blocks, zum Beispiel an Home Assistant: Licht
           dimmen, Handy auf „Nicht stören“.
         </Body>
+        <Body>
+          Ereignisse: „focus.started“ und „focus.ended“. Der Inhalt enthält Titel, Dauer und bei
+          Ende das verdiente Guthaben. Home Assistant: Automation mit „Webhook“-Auslöser (Adresse
+          wie http://homeassistant.local:8123/api/webhook/…) und Aktionen für Licht oder Szene. Die
+          Adresse im Heimnetz darf nur ein Admin eintragen.
+        </Body>
       </Section>
       <WebhookSettings ask={setConfirm} />
       <ConfirmSheet confirm={confirm} onClose={() => setConfirm(null)} />

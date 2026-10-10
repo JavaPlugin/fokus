@@ -28,6 +28,7 @@ import { registerDayRoutes } from './day-routes';
 import { registerRedirectRoutes } from './redirect-routes';
 import { registerWeekRoutes } from './week-routes';
 import { registerCalendarRoutes } from './calendar-routes';
+import { purgeRooms, registerRoomRoutes } from './room-routes';
 import { createPush, type PushSend } from './push';
 import { createMailer, e2eOutbox, type Mailer } from './mail';
 import { loadEmailTemplates, registerEmailTemplateRoutes } from './email-templates';
@@ -46,6 +47,7 @@ export function isPublicApi(method: string, path: string, e2e: boolean): boolean
   if (path.startsWith('/api/v1/')) return true;
   if (method === 'POST' && /^\/api\/(register|invites\/accept)$/.test(path)) return true;
   if (method === 'GET' && path === '/api/push/key') return true;
+  if (method === 'GET' && path === '/api/rooms/preview') return true;
   if (e2e && path.startsWith('/api/e2e/')) return true;
   return false;
 }
@@ -126,6 +128,7 @@ export function createApp({
     };
     createReminderJob(notifier, latest, async (now) => {
       await purgeUnverified(db, now);
+      await purgeRooms(db, now);
       // Lebenszeichen: bleibt es aus, meldet der Uptime-Dienst den Ausfall des täglichen Laufs
       if (env.HEARTBEAT_URL)
         await fetch(env.HEARTBEAT_URL, { signal: AbortSignal.timeout(10_000) }).catch(
@@ -406,6 +409,7 @@ export function createApp({
   registerDayRoutes(app, { db });
   registerRedirectRoutes(app, { db });
   registerWeekRoutes(app, { db });
+  registerRoomRoutes(app, { db, publicUrl: env.PUBLIC_URL });
   registerCalendarRoutes(app, { db, fetchFn: calendarFetch, resolve: webhookResolve });
   registerApiKeyRoutes(app, { db });
   registerWebhookRoutes(app, { db, hooks, resolve: webhookResolve });

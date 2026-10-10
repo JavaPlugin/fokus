@@ -22,6 +22,7 @@ export const PUBLIC_PATHS = new Set([
   '/nutzungsbedingungen',
   '/setup',
   '/einladung',
+  '/partner',
 ]);
 export const isPublicPath = (path: string) =>
   PUBLIC_PATHS.has(path.length > 1 && path.endsWith('/') ? path.slice(0, -1) : path);

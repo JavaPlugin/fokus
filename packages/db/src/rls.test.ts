@@ -158,7 +158,7 @@ describe('Jede Tabelle mit Nutzerdaten hat RLS', () => {
     const auth = ['account', 'passkey', 'session'];
     const without = rows.filter((r) => !(r.rls && r.force)).map((r) => r.name);
     expect(without).toEqual(auth);
-    expect(rows.length).toBeGreaterThanOrEqual(16);
+    expect(rows.length).toBeGreaterThanOrEqual(18);
     await h.close();
   });
 });

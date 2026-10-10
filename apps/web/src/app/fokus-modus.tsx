@@ -21,6 +21,8 @@ import { goBack } from '../components/BackButton';
 import { PageHead } from '../components/PageHead';
 import { api } from '../lib/api';
 import { useDay, type Running } from '../lib/day';
+import { useRoom } from '../lib/room';
+import { InviteSheet, LeaveRow, PartnerLine } from '../components/Partners';
 
 const mmss = (ms: number) => {
   const s = Math.max(0, Math.ceil(ms / 1000));
@@ -42,6 +44,8 @@ export default function FokusModus() {
   const [now, setNow] = useState(Date.now());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const room = useRoom();
+  const [invite, setInvite] = useState<{ url: string | null; error?: string } | null>(null);
 
   // Laufenden Durchgang holen; gibt es keinen, zurück zu Heute
   useEffect(() => {
@@ -102,6 +106,7 @@ export default function FokusModus() {
     setError('');
     try {
       const r = await day.finishFocus(phase.run.id, { taskDone });
+      void room.setState(taskDone ? 'focus' : 'pause');
       if (taskDone) setPhase({ kind: 'done', earned: r.earned, minutes: r.focusedMinutes });
       else
         setPhase({
@@ -122,6 +127,7 @@ export default function FokusModus() {
     setBusy(true);
     try {
       const r = await day.startFocus(phase.taskId ? { taskId: phase.taskId } : {});
+      void room.setState('focus');
       setPhase({ kind: 'focus', run: r });
     } catch (e) {
       setError((e as Error).message);
@@ -248,10 +254,35 @@ export default function FokusModus() {
                 </Text>
               </View>
             ) : null}
+            {room.room ? <PartnerLine room={room.room} now={now} /> : null}
           </>
         )}
 
         <View style={{ marginTop: 'auto', width: '100%', gap: 12 }}>
+          {phase.kind === 'focus' ? (
+            <Pressable
+              accessibilityRole="button"
+              onPress={async () => {
+                setInvite({ url: null });
+                try {
+                  const url = room.room
+                    ? room.room.isOwner
+                      ? await room.invite(room.room.id)
+                      : null
+                    : await room.create(title, phase.run.plannedMinutes);
+                  setInvite({ url });
+                } catch (e) {
+                  setInvite({ url: null, error: (e as Error).message });
+                }
+              }}
+              style={{ alignItems: 'center', minHeight: 36, justifyContent: 'center' }}
+            >
+              <Text style={[type.body, { color: p.ink2, fontSize: 14 }]}>
+                {room.room ? 'Weitere Person einladen' : 'Partner einladen'}
+              </Text>
+            </Pressable>
+          ) : null}
+          {room.room ? <LeaveRow room={room.room} onLeave={() => void room.leave()} /> : null}
           {phase.kind === 'focus' ? (
             <View style={{ flexDirection: 'row', gap: 12 }}>
               <View style={{ flex: 1 }}>
@@ -281,6 +312,12 @@ export default function FokusModus() {
           {error ? <Body muted>{error}</Body> : null}
         </View>
       </View>
+      <InviteSheet
+        open={!!invite}
+        url={invite?.url ?? null}
+        error={invite?.error}
+        onClose={() => setInvite(null)}
+      />
     </View>
   );
 }

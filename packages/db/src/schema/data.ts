@@ -260,3 +260,39 @@ export const webhookDelivery = pgTable(
   },
   (t) => [index('webhook_delivery_due').on(t.status, t.nextAt)],
 );
+
+/**
+ * Fokus-Partner: gemeinsamer Fokus-Block. `user_id` = Besitzer. Mitglieder sehen den Raum nur über
+ * die API (Mitgliedschaft in focus_room_member, eigene Zeile je Mitglied); die API liest dann im
+ * Admin-Kontext. Eingeladen wird über einen Link, gespeichert ist nur der SHA-256 des Tokens.
+ */
+export const focusRoom = pgTable('focus_room', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: owner(),
+  title: text('title').notNull().default(''),
+  minutes: integer('minutes').notNull(),
+  inviteHash: text('invite_hash').notNull().unique(),
+  status: text('status', { enum: ['open', 'closed'] })
+    .notNull()
+    .default('open'),
+  createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+  expiresAt: timestamp('expires_at', { withTimezone: true, mode: 'date' }).notNull(),
+});
+
+/** Eine Person im Raum (auch der Besitzer). Nur Name und Zustand sind für andere sichtbar. */
+export const focusRoomMember = pgTable(
+  'focus_room_member',
+  {
+    userId: owner(),
+    roomId: uuid('room_id')
+      .notNull()
+      .references(() => focusRoom.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    state: text('state', { enum: ['focus', 'pause'] })
+      .notNull()
+      .default('focus'),
+    joinedAt: timestamp('joined_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+    leftAt: timestamp('left_at', { withTimezone: true, mode: 'date' }),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.roomId] })],
+);

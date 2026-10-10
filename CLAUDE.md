@@ -53,6 +53,9 @@ Auftrag und Konzept: `PROMPT.md`. Design-Entwürfe: `design/` (HTML, im Browser 
 - Phase 5: Energie: Tabelle `energy_day` (Tag → niedrig/normal/hoch), `PUT /api/energy/:tag`; `planDay` bekommt `energy` und `peaks` (`PlanSettings.peaks`, Standard 09–12 Uhr): niedrig = Schweres zuletzt und ohne Hochphase, sonst Schweres zuerst in die Hochphase. Heute fragt vormittags (vor 14 Uhr) „Wie viel Energie…“ und plant bei vorhandenem Plan neu. Woche zeigt die Energie je Tag.
 - Phase 5: Lücken-Füller: `GET /api/day` liefert Lücken ≥ 15 Min. mit Vorschlägen (`suggestForGap`); Heute zeigt bis zu 3, Tippen legt einen Fokus-Block in die Lücke (`fillGap`).
 
+- Phase 6: Fokus-Partner `apps/api/src/room-routes.ts`: Tabellen `focus_room` (user_id = Besitzer) und `focus_room_member` (user_id = jeweils die Person), beide mit `own_rows` + `admin_all` (Migration `0008`). Mitglieder sehen den Raum nie direkt: die API prüft die eigene Mitgliedszeile (`withUser`) und liest dann gemeinsam im Admin-Kontext. Einladung = Link `/partner?token=…` (nur SHA-256 gespeichert, `POST /api/rooms/:id/invite` rotiert, alter Link ungültig), Vorschau `GET /api/rooms/preview` ist öffentlich (Name, Titel, Dauer). Raum gilt 3 Std., ein offener Raum je Besitzer, höchstens 8 Personen, Aufräumen nach 1 Tag im täglichen Job. Live per SSE `GET /api/rooms/:id/events` (im Speicher, ein API-Prozess, „update“-Ping, Client holt den Stand neu; alle 30 s zusätzlich Polling). Sichtbar für andere nur Name und Zustand fokus/pause. Client `lib/room.ts` (`useRoom`), `components/Partners.tsx`, Seite `app/partner.tsx` (öffentlich in `PUBLIC_PATHS`). Räume sind nicht Teil des Kontoexports.
+- Phase 6: Smart Home: Webhooks (`focus.started`/`focus.ended`, Phase 1) mit Anleitung für Home Assistant in `app/entwickler.tsx`; Adressen im Heimnetz nur durch Admins.
+
 ## Befehle
 
 ```bash

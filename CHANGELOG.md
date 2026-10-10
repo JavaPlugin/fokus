@@ -4,6 +4,11 @@ Alle Versionen von FOKUS. Installiert wird über Admin-Panel → System (Tag `vX
 
 ## Unveröffentlicht
 
+### Phase 6: Fokus-Partner und Smart Home
+
+- Fokus-Partner: Im Fokus-Modus Partner per Link einladen, live sehen, wer mitarbeitet (nur Name und Fokus/Pause).
+- Smart Home: Webhooks bei Start und Ende eines Fokus-Blocks, Anleitung für Home Assistant.
+
 ### Phase 5: Kalender, Energie, Lücken
 
 - Kalender-Sync per ICS-Adresse (Google, Apple, Outlook): Termine blockieren Zeit im Tagesplan, Wiederholungen werden aufgelöst.
