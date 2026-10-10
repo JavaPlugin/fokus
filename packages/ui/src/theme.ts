@@ -50,6 +50,33 @@ export const kindColors = {
 } as const;
 export type Kind = keyof typeof kindColors;
 
+/**
+ * Fokus-Karte (Heute) und Fokus-Modus: dunkler blauer Verlauf; Pause grün. Nur dunkel, hell bleibt
+ * eine ruhige Fläche.
+ */
+export const kindScreens = {
+  focus: {
+    base: '#0B0B0C',
+    card: 'radial-gradient(60% 70% at 90% 0%, rgba(90,200,250,0.22) 0%, rgba(90,200,250,0) 70%), radial-gradient(120% 120% at 0% 0%, #10283A 0%, #0A161E 50%, #0B0B0C 100%)',
+    screen: 'radial-gradient(90% 55% at 50% 38%, #10283A 0%, #0A161E 45%, #000000 80%)',
+    border: 'rgba(90,200,250,0.35)',
+    chip: 'rgba(90,200,250,0.12)',
+    text: '#7CC8FF',
+  },
+  pause: {
+    base: '#0B0B0C',
+    card: 'radial-gradient(60% 70% at 90% 0%, rgba(48,209,88,0.20) 0%, rgba(48,209,88,0) 70%), radial-gradient(120% 120% at 0% 0%, #1F3A2B 0%, #0E1A14 50%, #0B0B0C 100%)',
+    screen: 'radial-gradient(90% 55% at 50% 38%, #1F3A2B 0%, #0E1A14 45%, #000000 80%)',
+    border: 'rgba(48,209,88,0.35)',
+    chip: 'rgba(48,209,88,0.12)',
+    text: '#8FE3B0',
+  },
+} as const;
+/** Spur des Fortschrittsrings und Glas auf dunklem Grund. */
+export const ringTrack = '#1C1C1F';
+export const glassFill = 'rgba(255,255,255,0.06)';
+export const glassBorder = 'rgba(255,255,255,0.08)';
+
 /** Hero-Karte: dunkler radialer Verlauf mit grünem Leuchten oben rechts. */
 export const hero = {
   base: '#0B0B0C',

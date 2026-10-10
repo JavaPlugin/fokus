@@ -1,4 +1,3 @@
-import { splitEUR, type Cents } from '@fokus/core';
 import type { ReactNode, Ref } from 'react';
 import {
   ActivityIndicator,
@@ -23,41 +22,56 @@ export function usePalette(): Palette {
 
 const tabular: TextStyle = { fontVariant: ['tabular-nums'] };
 
-/** Vorlesbarer Betrag für VoiceOver: „minus zehn Euro“ statt „-10,00 €“. */
-export function spokenEUR(cents: Cents): string {
-  const abs = Math.abs(cents);
-  const e = Math.floor(abs / 100);
-  const c = abs % 100;
-  return `${cents < 0 ? 'minus ' : ''}${e} Euro${c ? ` ${c} Cent` : ''}`;
-}
-
-/** Hauptzahl eines Screens. Euro groß in ink, Cent und „€“ in ink-3. */
+/** Hauptzahl eines Screens: große Zahl, daneben die Einheit („35“ + „Min“) und eine Zeile darunter. */
 export function Hero({
   label,
-  cents,
-  tone: t,
-  signed,
+  value,
+  unit,
+  sub,
 }: {
   label: string;
-  cents: Cents;
-  /** positive: Zahl grün (Hero-Karten der Farbwelt). Negativ ist immer rot. */
-  tone?: 'positive';
-  /** „+“ vor positiven Beträgen (Salden). */
-  signed?: boolean;
+  value: string;
+  unit?: string;
+  sub?: string;
 }) {
   const p = usePalette();
-  const { sign, euros, cents: ct } = splitEUR(cents);
-  const tone = cents < 0 ? p.negative : t && cents > 0 ? p[t] : p.ink;
   return (
-    <View accessible accessibilityLabel={`${label}: ${spokenEUR(cents)}`} style={{ gap: 4 }}>
-      <Text style={[type.small, { color: p.ink2 }]}>{label}</Text>
-      <Text style={[type.hero, tabular, { color: tone }]}>
-        {signed && cents > 0 ? '+' : sign}
-        {euros}
-        <Text style={{ color: tone === p.ink ? p.ink3 : tone, opacity: tone === p.ink ? 1 : 0.7 }}>
-          ,{ct} €
+    <View
+      accessible
+      accessibilityLabel={`${label}: ${value}${unit ? ` ${unit}` : ''}`}
+      style={{ gap: 2 }}
+    >
+      <Text style={[type.small, { color: p.ink2, fontSize: 15 }]}>{label}</Text>
+      <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8 }}>
+        <Text
+          style={[
+            type.hero,
+            tabular,
+            {
+              color: p.ink,
+              fontSize: 72,
+              lineHeight: 76,
+              letterSpacing: -3,
+              fontFamily: font.bold,
+            },
+          ]}
+        >
+          {value}
         </Text>
-      </Text>
+        {unit ? (
+          <Text
+            style={[
+              tabular,
+              { color: p.ink3, fontSize: 40, fontFamily: font.semibold, letterSpacing: -1 },
+            ]}
+          >
+            {unit}
+          </Text>
+        ) : null}
+      </View>
+      {sub ? (
+        <Text style={[type.small, { color: p.ink2, fontSize: 14, marginTop: 6 }]}>{sub}</Text>
+      ) : null}
     </View>
   );
 }

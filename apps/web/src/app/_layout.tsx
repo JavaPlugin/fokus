@@ -12,6 +12,7 @@ import { Platform, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { UpdateBanner } from '../components/UpdateBanner';
 import { AppProvider } from '../lib/app';
+import { DayProvider } from '../lib/day';
 import { PrivacyProvider } from '../lib/privacy';
 import { UndoProvider } from '../lib/undo';
 import { loadDisplay, loadScheme } from '../lib/theme';
@@ -38,18 +39,20 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <AppProvider>
-        <PrivacyProvider>
-          <UndoProvider>
-            <StatusBar style="auto" />
-            <View style={{ flex: 1 }}>
-              <Stack
-                screenOptions={{ headerShown: false, contentStyle: { backgroundColor: p.bg } }}
-              />
-              <AuthGate />
-            </View>
-            <UpdateBanner />
-          </UndoProvider>
-        </PrivacyProvider>
+        <DayProvider>
+          <PrivacyProvider>
+            <UndoProvider>
+              <StatusBar style="auto" />
+              <View style={{ flex: 1 }}>
+                <Stack
+                  screenOptions={{ headerShown: false, contentStyle: { backgroundColor: p.bg } }}
+                />
+                <AuthGate />
+              </View>
+              <UpdateBanner />
+            </UndoProvider>
+          </PrivacyProvider>
+        </DayProvider>
       </AppProvider>
     </SafeAreaProvider>
   );

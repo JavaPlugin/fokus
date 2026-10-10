@@ -38,6 +38,11 @@ Auftrag und Konzept: `PROMPT.md`. Design-Entwürfe: `design/` (HTML, im Browser 
 - Phase 1: API `apps/api/src/task-routes.ts` (Aufgaben, Inbox, `/api/v1/inbox` mit Schlüssel) und `day-routes.ts` (`/api/plan/settings`, `/api/day/:day` mit Lücken und Vorschlägen, Blöcke, `POST /api/plan/:day` ersetzt nur Geplantes aus der Planung (`source=plan`, heute nur ab jetzt), `/api/focus/start|finish|current`, `/api/credit`, `/api/credit/spend`). Neue Datensätze dürfen eine eigene ID mitbringen (wiederholbar für die Offline-Warteschlange). Fokus-Ende: gearbeitet = Timer-Dauer, höchstens geplante Zeit + 30 Min.; unter 1 Min. = abgebrochen ohne Guthaben. Ein Fokus-Block gleichzeitig (409). Webhook-Ereignisse `focus.started`/`focus.ended` werden hier ausgelöst.
 - Phase 1: Social-Slots geben Guthaben über `POST /api/credit/spend` (Grund `social`) aus, „10 Min. vom Guthaben nehmen“ mit Grund `redirect`. Die Social-Zeit der Woche = Summe der Ausgaben beider Gründe.
 
+- Phase 2: Gemeinsamer Tagesstand im Client `apps/web/src/lib/day.tsx` (`DayProvider`/`useDay`: Tag, Notizen, Aktionen; lädt erst nach `reload()` aus dem Tab-Layout, danach jede Minute und bei Rückkehr). Seiten: `(tabs)/index.tsx` (Heute), `(tabs)/fokus.tsx` (Starter), `(tabs)/inbox.tsx`, Vollbild `app/fokus-modus.tsx` (Timer-Ring aus `@fokus/ui` `Ring`, Pause = Fokus beenden + Pause-Uhr, „Weiter fokussieren“ = neuer Durchgang), `components/BlockSheet.tsx` (Block starten/erledigen/überspringen/löschen; Social-Slot gibt Guthaben aus), `CaptureSheet` (Plus: Inbox oder direkt Aufgabe mit Dauer). UI-Bausteine `packages/ui/src/fokus.tsx` (`KindCard`, `Ring`, `BlockRow`), `Hero` zeigt Zahl + Einheit, Farben `kindScreens` in `theme.ts`.
+- Phase 2: Eine PWA kann „Nicht stören“ nicht schalten: der Chip im Fokus-Modus heißt „Fokus läuft“ (Entwurf: „Nicht stören an“). Dafür gibt es später Webhooks/Kurzbefehle.
+- Phase 2: Unter einer Minute gearbeitet = Durchgang abgebrochen, Block übersprungen, kein Guthaben (die Aufgabe gilt bei „Erledigt“ trotzdem als erledigt).
+- Phase 2: Screenshots: `SHOTS=1 pnpm e2e screenshots` → `docs/screenshots`; Beispiel-Guthaben über `POST /api/e2e/credit` (nur mit `FK_E2E=1`).
+
 ## Befehle
 
 ```bash

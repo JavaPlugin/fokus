@@ -108,3 +108,6 @@ export const minutesText = (min: number) => {
   const m = min % 60;
   return h ? (m ? `${h} Std. ${m} Min.` : `${h} Std.`) : `${m} Min.`;
 };
+
+/** „09:30“ aus einem ISO-Zeitpunkt (Berlin) */
+export { clock } from '@fokus/core';

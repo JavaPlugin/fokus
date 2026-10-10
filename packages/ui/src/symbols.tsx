@@ -42,7 +42,10 @@ export type UiSymbol =
   | 'haken'
   | 'glocke'
   | 'schluessel'
-  | 'pause';
+  | 'pause'
+  | 'play'
+  | 'plus'
+  | 'papierkorb';
 
 const NAMES: Record<SymbolKey, string> = {
   essen: 'Essen',
@@ -302,6 +305,9 @@ export function SymbolIcon({
     ),
     haken: <Path d="M5 12.5l4.5 4.5L19 7.5" {...s} />,
     pause: <Path d="M9 5.5v13M15 5.5v13" {...s} />,
+    play: <Path d="M8 5.5v13l10.5-6.5Z" {...s} fill={color} />,
+    plus: <Path d="M12 5v14M5 12h14" {...s} />,
+    papierkorb: <Path d="M5 7h14M10 7V4.5h4V7M7 7l1 13h8l1-13M10 11v5M14 11v5" {...s} />,
     glocke: <Path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15L6 16ZM10 20.5a2 2 0 0 0 4 0" {...s} />,
     schluessel: (
       <>

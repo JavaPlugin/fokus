@@ -120,7 +120,11 @@ test('Abgelaufene Sitzung (401): App räumt auf und geht zur Willkommensseite', 
     (await page.request.post('/api/auth/sign-out', { data: {}, headers: { origin } })).ok(),
   ).toBe(true);
   // Nächster Aufruf der App (Profil lädt Mitteilungen und Splits) bekommt 401 → aufräumen
-  await page.getByRole('button', { name: 'Profil' }).click();
+  // (ein Hintergrund-Abruf der App kann den 401 schon vor dem Tipp auslösen: auch gut)
+  await page
+    .getByRole('button', { name: 'Profil' })
+    .click({ timeout: 3000 })
+    .catch(() => undefined);
   await expect(page).toHaveURL(/\/willkommen/);
   expect(await page.evaluate(() => localStorage.getItem('fk_queue'))).toBeNull();
   await ctx.close();

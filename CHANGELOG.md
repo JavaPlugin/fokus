@@ -4,6 +4,12 @@ Alle Versionen von FOKUS. Installiert wird über Admin-Panel → System (Tag `vX
 
 ## Unveröffentlicht
 
+### Phase 2: Screens
+
+- Heute: Scroll-Guthaben als große Zahl, aktueller Fokus-Block als Karte, Tagesliste mit Uhrzeiten, „Tag planen“.
+- Fokus-Modus mit Timer-Ring, Guthaben-Hinweis, Pause und Erledigt; Fokus-Tab zum Starten.
+- Inbox mit Notizen und Aufgaben, Plus-Knopf zum schnellen Erfassen.
+
 ### Phase 1: Kern
 
 - Aufgaben, Inbox, Zeitblöcke (Fokus, Pause, Social, Termin), Tagesplan, Fokus-Timer-Durchgänge und Scroll-Guthaben (1 Std. Fokus = 15 Min., einstellbar, mit Tageslimit) in Kern, Datenbank und API.

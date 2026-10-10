@@ -10,6 +10,7 @@ import { PagerTabs as Tabs } from '../../components/PagerTabs';
 import { TabBar } from '../../components/TabBar';
 import { TermsNotice } from '../../components/TermsNotice';
 import { api, bootState } from '../../lib/api';
+import { useDay } from '../../lib/day';
 
 type Boot = Awaited<ReturnType<typeof bootState>> | { kind: 'error'; message: string } | null;
 
@@ -46,15 +47,18 @@ function TabsContent() {
   const path = initial ?? routerPath;
   // Neue Nutzer: erst die Einführung (abgebrochene geht beim nächsten Start weiter)
   const [intro, setIntro] = useState(false);
+  const { reload } = useDay();
 
   useEffect(() => {
     bootState()
       .then((b) => {
         setBoot(b);
-        if (b.kind === 'ready')
+        if (b.kind === 'ready') {
+          void reload();
           void api<{ done: boolean }>('/api/onboarding')
             .then((o) => setIntro(!o.done))
             .catch(() => undefined);
+        }
       })
       .catch((e: Error) => setBoot({ kind: 'error', message: e.message }));
   }, []);

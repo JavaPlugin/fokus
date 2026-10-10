@@ -1,5 +1,14 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
-import { appSettings, expectedMigrations, invite, migrationState, user, type Db } from '@fokus/db';
+import {
+  appSettings,
+  creditEntry,
+  expectedMigrations,
+  invite,
+  migrationState,
+  user,
+  withUser,
+  type Db,
+} from '@fokus/db';
 import { and, eq, gt, isNull, sql } from 'drizzle-orm';
 import { Hono, type Context } from 'hono';
 import { cors } from 'hono/cors';
@@ -391,8 +400,19 @@ export function createApp({
   registerWebhookRoutes(app, { db, hooks, resolve: webhookResolve });
 
   // Nur Browser-Tests: Anmeldelinks aus dem Test-Postfach lesen (siehe e2e/)
-  if (env.FK_E2E === '1' && env.NODE_ENV !== 'production')
+  if (env.FK_E2E === '1' && env.NODE_ENV !== 'production') {
     app.get('/api/e2e/mails', (c) => c.json(e2eOutbox));
+    // Beispieldaten für Screenshots: Guthaben direkt gutschreiben (nur mit Anmeldung)
+    app.post('/api/e2e/credit', async (c) => {
+      const u = c.get('user');
+      if (!u) return c.json({ error: 'Nicht angemeldet.' }, 401);
+      const b = (await c.req.json().catch(() => ({}))) as { minutes?: number };
+      await withUser(db, u.id, (tx) =>
+        tx.insert(creditEntry).values({ userId: u.id, minutes: b.minutes ?? 0, reason: 'focus' }),
+      );
+      return c.body(null, 204);
+    });
+  }
   push.register(app);
 
   // ---------- Eigenes Konto ----------
