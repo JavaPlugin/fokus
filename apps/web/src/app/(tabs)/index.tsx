@@ -15,6 +15,7 @@ import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { BlockSheet } from '../../components/BlockSheet';
+import { SocialSheet } from '../../components/SocialSheet';
 import { HeadButtons } from '../../components/HeadButtons';
 import { Screen, type ScreenHead } from '../../components/Screen';
 import { useDay, type Block } from '../../lib/day';
@@ -39,6 +40,7 @@ export default function Heute() {
   const { data, error, planToday, startFocus } = useDay();
   const [now, setNow] = useState(Date.now());
   const [open, setOpen] = useState<Block | null>(null);
+  const [social, setSocial] = useState(false);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState('');
   const head: ScreenHead = { title: 'Heute', right: <HeadButtons /> };
@@ -225,7 +227,9 @@ export default function Heute() {
         ) : null}
       </View>
 
+      <Button label="Social-Slot planen" variant="secondary" onPress={() => setSocial(true)} />
       <BlockSheet block={open} onClose={() => setOpen(null)} />
+      <SocialSheet open={social} onClose={() => setSocial(false)} />
     </Screen>
   );
 }

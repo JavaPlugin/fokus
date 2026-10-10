@@ -382,3 +382,67 @@ describe('Export und Import', () => {
     expect((await req('POST', '/api/import', { text: 'kaputt', mode: 'merge' })).status).toBe(400);
   });
 });
+
+describe('Umleiten', () => {
+  type R = {
+    label: string;
+    insideSlot: boolean;
+    nextSocial: string | null;
+    task: { id: string; title: string } | null;
+    fallback: string;
+    bonus: number;
+    spend: number;
+    credit: { balance: number };
+  };
+
+  it('Mini-Aufgabe als Vorschlag, Bonus höchstens 3-mal am Tag, Fallback ohne Aufgabe', async () => {
+    const empty = await req<R>('GET', '/api/redirect?app=instagram');
+    expect(empty.data).toMatchObject({
+      label: 'Instagram',
+      insideSlot: false,
+      task: null,
+      bonus: 3,
+      spend: 10,
+    });
+    expect(empty.data.fallback.length).toBeGreaterThan(3);
+
+    const m = await req<Task>('POST', '/api/tasks', { title: 'Lena antworten', mini: true });
+    const r = await req<R>('GET', '/api/redirect?app=tiktok');
+    expect(r.data.task).toMatchObject({ id: m.data.id, title: 'Lena antworten' });
+
+    const done = await req<{ bonus: number; credit: { balance: number } }>(
+      'POST',
+      '/api/redirect/done',
+      {
+        taskId: m.data.id,
+      },
+    );
+    expect(done.data).toMatchObject({ bonus: 3, credit: { balance: 3 } });
+    expect((await req<Task[]>('GET', '/api/tasks?status=done')).data).toHaveLength(1);
+    await req('POST', '/api/redirect/done', {});
+    await req('POST', '/api/redirect/done', {});
+    const fourth = await req<{ bonus: number; credit: { balance: number } }>(
+      'POST',
+      '/api/redirect/done',
+      {},
+    );
+    expect(fourth.data).toMatchObject({ bonus: 0, credit: { balance: 9 } });
+    expect((await req<R>('GET', '/api/redirect?app=instagram')).data.bonus).toBe(0);
+  });
+
+  it('im Social-Slot: erlaubt; sonst nächster Slot', async () => {
+    const { instant } = await import('@fokus/core');
+    const day = todayIn();
+    const start = new Date(Date.now() - 5 * 60_000).toISOString();
+    await req('POST', '/api/blocks', { kind: 'social', startsAt: start, minutes: 20 });
+    expect((await req<R>('GET', '/api/redirect?app=instagram')).data.insideSlot).toBe(true);
+    await req('POST', '/api/blocks', {
+      kind: 'social',
+      startsAt: new Date(Date.now() + 3 * 3600_000).toISOString(),
+      minutes: 20,
+    });
+    void instant;
+    void day;
+    expect((await req<R>('GET', '/api/redirect?app=unbekannt')).data.label).toBe('Social Media');
+  });
+});

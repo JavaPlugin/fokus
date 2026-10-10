@@ -21,6 +21,10 @@ export interface PlanSettings {
   baselineScroll: number;
   /** Fokus-Minuten, ab denen ein Tag für die Serie zählt */
   streakGoal: number;
+  /** „Umleiten“: Guthaben für eine erledigte 2-Minuten-Aufgabe */
+  redirectBonus: number;
+  /** „Umleiten“: so viele Minuten nimmt „vom Guthaben nehmen“ */
+  redirectSpend: number;
 }
 
 export const DEFAULT_SETTINGS: PlanSettings = {
@@ -32,6 +36,8 @@ export const DEFAULT_SETTINGS: PlanSettings = {
   workEnd: '18:00',
   baselineScroll: 67,
   streakGoal: 60,
+  redirectBonus: 3,
+  redirectSpend: 10,
 };
 
 /** Was die Planung von einer Aufgabe wissen muss. */

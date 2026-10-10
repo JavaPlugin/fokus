@@ -43,6 +43,10 @@ Auftrag und Konzept: `PROMPT.md`. Design-Entwürfe: `design/` (HTML, im Browser 
 - Phase 2: Unter einer Minute gearbeitet = Durchgang abgebrochen, Block übersprungen, kein Guthaben (die Aufgabe gilt bei „Erledigt“ trotzdem als erledigt).
 - Phase 2: Screenshots: `SHOTS=1 pnpm e2e screenshots` → `docs/screenshots`; Beispiel-Guthaben über `POST /api/e2e/credit` (nur mit `FK_E2E=1`).
 
+- Phase 3: Umleiten: Seite `app/umleiten.tsx` (`/umleiten?app=instagram`, nur angemeldet), API `apps/api/src/redirect-routes.ts` (`GET /api/redirect`: im Social-Slot → erlaubt, sonst `pickRedirectTask` (Mini bis 2 Min.) oder Vorschlagstext; `POST /api/redirect/done`: Bonus `redirectBonus` (3 Min.), höchstens 3 pro Tag; „10 Min. vom Guthaben“ = `/api/credit/spend` mit `reason: redirect`, Menge `redirectSpend`). App-Liste und Schemata (`instagram://` …) in `REDIRECT_APPS`. Einführung (Schritt 3) und Profil-Kachel mit `components/RedirectGuide.tsx` (iPhone-Kurzbefehle-Automation „Wenn App geöffnet → URL öffnen“).
+- Phase 3: Social-Slots: `components/SocialSheet.tsx` (in 30 Min. / volle Stunden, 10–45 Min.), Start im `BlockSheet` zieht Guthaben ab.
+- Phase 3: Erinnerungen `apps/api/src/reminders.ts`: jede Minute (Server mit `jobs: true`), 5 Min. vor Fokus-Block/Social-Slot (Schlüssel `block:{id}`), Tagesrückblick ab 20 Uhr Berlin (`recap:{tag}`, nur bei Aktivität). Liest über `withAdmin` (Migration `0004` gibt `admin_read` auf `time_block`, `focus_session`, `credit_entry`).
+
 ## Befehle
 
 ```bash

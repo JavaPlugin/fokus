@@ -104,7 +104,7 @@ export const dayInZone = (at: string | number, timeZone = TIME_ZONE): Day =>
   todayIn(timeZone, new Date(at));
 
 /** „09:30“ eines Zeitpunkts in der Zeitzone. */
-export function clock(at: string | number, timeZone = TIME_ZONE): string {
+export function clock(at: string | number | Date, timeZone = TIME_ZONE): string {
   return new Intl.DateTimeFormat('de-DE', {
     timeZone,
     hour: '2-digit',

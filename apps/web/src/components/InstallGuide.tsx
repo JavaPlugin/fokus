@@ -7,7 +7,7 @@ import Svg, { Circle, Path, Rect } from 'react-native-svg';
 import { useInstall } from '../lib/install';
 
 /** Tipp-Kreis über einem Element. */
-function Tap({ style }: { style?: ViewStyle }) {
+export function Tap({ style }: { style?: ViewStyle }) {
   const p = usePalette();
   return (
     <View
@@ -32,7 +32,7 @@ function Tap({ style }: { style?: ViewStyle }) {
 }
 
 /** Mini-Bildschirm mit Schrittnummer und Text darunter. */
-function Step({ n, text, children }: { n: number; text: string; children: ReactNode }) {
+export function Step({ n, text, children }: { n: number; text: string; children: ReactNode }) {
   const p = usePalette();
   return (
     <View style={{ flex: 1, minWidth: 96, gap: 8 }}>

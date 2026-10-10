@@ -52,6 +52,8 @@ const settingsInput = z
     workEnd: hhmm,
     baselineScroll: z.number().int().min(0).max(600),
     streakGoal: z.number().int().min(1).max(600),
+    redirectBonus: z.number().int().min(0).max(30),
+    redirectSpend: z.number().int().min(1).max(60),
   })
   .partial()
   .refine((s) => !s.workStart || !s.workEnd || s.workStart < s.workEnd, {

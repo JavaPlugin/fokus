@@ -42,6 +42,8 @@ export const userSettings = pgTable('user_settings', {
     workEnd?: string;
     baselineScroll?: number;
     streakGoal?: number;
+    redirectBonus?: number;
+    redirectSpend?: number;
   }>(),
   updatedAt: timestamp('updated_at', { withTimezone: true })
     .notNull()

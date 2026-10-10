@@ -29,6 +29,13 @@
       "when": 1791623413944,
       "tag": "0003_tasks_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1791624681500,
+      "tag": "0004_reminders_admin",
+      "breakpoints": true
     }
   ]
 }

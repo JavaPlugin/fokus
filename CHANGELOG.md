@@ -4,6 +4,12 @@ Alle Versionen von FOKUS. Installiert wird über Admin-Panel → System (Tag `vX
 
 ## Unveröffentlicht
 
+### Phase 3: Umleiten, Social-Slots, Erinnerungen
+
+- Umleiten: Öffnest du Instagram, TikTok & Co. außerhalb eines Slots, zeigt FOKUS eine 2-Minuten-Aufgabe. Optionen: Aufgabe machen (+3 Min.), 10 Min. vom Guthaben nehmen, trotzdem öffnen. Anleitung für die iPhone-Kurzbefehle in der Einführung und im Profil.
+- Social-Slots als eigene Termine, Guthaben wird beim Start abgezogen.
+- Erinnerungen vor Fokus-Block und Social-Slot sowie Tagesrückblick am Abend (Push und/oder E-Mail).
+
 ### Phase 2: Screens
 
 - Heute: Scroll-Guthaben als große Zahl, aktueller Fokus-Block als Karte, Tagesliste mit Uhrzeiten, „Tag planen“.

@@ -139,6 +139,16 @@ export default function Profil() {
       keys: 'hilfe start einrichten umleiten',
       onPress: () => router.push({ pathname: '/einfuehrung', params: { wieder: '1' } }),
     },
+    {
+      id: 'redirect',
+      symbol: 'uhr' as const,
+      color: accents.violet.from,
+      title: 'Umleiten einrichten',
+      detail: 'Kurzbefehl für Instagram, TikTok & Co.',
+      keys: 'umleiten kurzbefehle automation instagram tiktok social sperre',
+      onPress: () =>
+        router.push({ pathname: '/einfuehrung', params: { wieder: '1', schritt: 'umleiten' } }),
+    },
     ...(!installed
       ? [
           {

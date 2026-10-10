@@ -25,10 +25,12 @@ import { registerDataRoutes } from './data-routes';
 import { registerSettingsRoutes } from './settings-routes';
 import { registerTaskRoutes } from './task-routes';
 import { registerDayRoutes } from './day-routes';
+import { registerRedirectRoutes } from './redirect-routes';
 import { createPush, type PushSend } from './push';
 import { createMailer, e2eOutbox, type Mailer } from './mail';
 import { loadEmailTemplates, registerEmailTemplateRoutes } from './email-templates';
 import { createNotifier, createReminderJob, registerNotifyRoutes } from './notify';
+import { createReminders } from './reminders';
 import type { Auth } from './auth';
 import type { Env } from './env';
 
@@ -103,6 +105,7 @@ export function createApp({
     push,
     publicUrl: env.PUBLIC_URL,
   });
+  if (jobs) createReminders({ db, notifier, publicUrl: env.PUBLIC_URL }).start();
   if (jobs) {
     // Neue Version beim Updater? (nur wenn er eingerichtet ist)
     const latest = async () => {
@@ -396,6 +399,7 @@ export function createApp({
   registerSettingsRoutes(app, { db });
   registerTaskRoutes(app, { db });
   registerDayRoutes(app, { db });
+  registerRedirectRoutes(app, { db });
   registerApiKeyRoutes(app, { db });
   registerWebhookRoutes(app, { db, hooks, resolve: webhookResolve });
 

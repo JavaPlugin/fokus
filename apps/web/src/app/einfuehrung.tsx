@@ -20,12 +20,15 @@ import { api } from '../lib/api';
 import { enablePush, type PushState } from '../lib/push';
 import { PageHead } from '../components/PageHead';
 import { InstallGuide } from '../components/InstallGuide';
+import { RedirectGuide } from '../components/RedirectGuide';
 import { goBack } from '../components/BackButton';
 import { isStandalone } from '../lib/install';
 
-const STEPS = 3;
+const STEPS = 4;
 /** Schritt „Zum Home-Bildschirm“ (früh, gleich nach der Begrüßung). */
 const INSTALL_STEP = 1;
+/** Schritt „Umleiten einrichten“. */
+const REDIRECT_STEP = 2;
 
 export default function Einfuehrung() {
   return (
@@ -42,7 +45,8 @@ function EinfuehrungInhalt() {
   const { wieder, schritt } = useLocalSearchParams<{ wieder?: string; schritt?: string }>();
   const again = wieder === '1';
   const installOnly = schritt === 'install';
-  const [step, setStep] = useState(installOnly ? INSTALL_STEP : 0);
+  const redirectOnly = schritt === 'umleiten';
+  const [step, setStep] = useState(installOnly ? INSTALL_STEP : redirectOnly ? REDIRECT_STEP : 0);
   const [loaded, setLoaded] = useState(again);
   const fade = useRef(new Animated.Value(1)).current;
   const reduced = useReducedMotion();
@@ -67,7 +71,7 @@ function EinfuehrungInhalt() {
   }
 
   async function go(target: number) {
-    if (installOnly) return close();
+    if (installOnly || redirectOnly) return close();
     // Schon installiert (Home-Bildschirm): Anleitung überspringen
     const next = target === INSTALL_STEP && isStandalone() ? target + 1 : target;
     if (next >= STEPS) return finish();
@@ -84,6 +88,7 @@ function EinfuehrungInhalt() {
   const screens: ReactNode[] = [
     <Welcome key="w" onNext={() => go(1)} />,
     <InstallStep key="i" onNext={() => go(INSTALL_STEP + 1)} />,
+    <RedirectStep key="r" onNext={() => go(REDIRECT_STEP + 1)} />,
     <Finish key="s" onDone={finish} />,
   ];
 
@@ -161,6 +166,21 @@ function InstallStep({ onNext }: { onNext: () => void }) {
           text="Dann startet es wie eine App: ohne Adressleiste, mit Mitteilungen, immer einen Tipp entfernt."
         />
         <InstallGuide />
+      </View>
+      <Button label="Weiter" onPress={onNext} />
+    </View>
+  );
+}
+
+function RedirectStep({ onNext }: { onNext: () => void }) {
+  return (
+    <View style={{ flex: 1, justifyContent: 'space-between', gap: 24 }}>
+      <View style={{ gap: 20, paddingTop: 12 }}>
+        <Heading
+          title="Umleiten statt sperren"
+          text="Öffnest du Instagram oder TikTok außerhalb eines Social-Slots, zeigt FOKUS dir eine kleine Aufgabe. Richte das einmal in den Kurzbefehlen ein (iPhone)."
+        />
+        <RedirectGuide />
       </View>
       <Button label="Weiter" onPress={onNext} />
     </View>
