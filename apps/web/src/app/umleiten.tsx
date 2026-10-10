@@ -84,7 +84,6 @@ export default function Umleiten() {
       <View
         style={{
           flex: 1,
-          backgroundColor: p.bg,
           alignItems: 'center',
           justifyContent: 'center',
           padding: 24,
@@ -283,7 +282,7 @@ export default function Umleiten() {
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: p.bg }}>
+    <View style={{ flex: 1 }}>
       <PageHead title="Umleiten" />
       <View
         style={{

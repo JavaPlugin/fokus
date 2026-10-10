@@ -33,9 +33,9 @@ export interface MailRow {
   label: string;
   sub?: string;
   value: string;
-  /** Rot, z. B. negativer Kontostand. */
+  /** Rot, z. B. eine Warnung. */
   negative?: boolean;
-  /** Grau gedruckter Name (z. B. „Kontostand danach“). */
+  /** Grau gedruckter Name (z. B. ein Nebenwert). */
   muted?: boolean;
 }
 export interface MailSection {

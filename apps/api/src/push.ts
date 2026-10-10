@@ -74,7 +74,7 @@ export function createPush(db: Db, publicUrl: string, send: PushSend = realSend)
         }
       }
     } catch {
-      /* Mitteilung ist ein Extra, die Buchung zählt */
+      /* Mitteilung ist ein Extra, der Speicherstand zählt */
     }
   }
 

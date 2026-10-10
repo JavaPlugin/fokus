@@ -1,5 +1,5 @@
 // Datumsauswahl: drei Bausteine, überall gleich. Nie Freitext.
-// - DateField: einzelnes Datum (Buchung, Begleichen), öffnet Kalender mit „Heute“ / „Gestern“
+// - DateField: einzelnes Datum (Fälligkeit, Termin), öffnet Kalender mit „Heute“ / „Gestern“
 // - DayOfMonthPicker: Tag im Monat (monatliche Posten), Raster 1–31 + „Letzter Tag“
 // - YearlyPicker: Monat + Tag (jährliche Termine, Kündbar bis)
 // Gespeichert wird ISO (YYYY-MM-DD) bzw. Zahlen, angezeigt deutsch.

@@ -14,7 +14,7 @@ async function shot(page: Page, name: string, scheme: 'dark' | 'light') {
   await page.screenshot({ path: join(OUT, `${name}-${scheme}.png`) });
 }
 
-test('Beispieldaten und Screenshots', async ({ page, request }) => {
+test('Beispieldaten und Screenshots', async ({ page, request, browser }) => {
   const day = todayIn();
   await request.put('/api/plan/settings', { data: { workStart: '00:00', workEnd: '23:55' } });
   await request.post('/api/e2e/credit', { data: { minutes: 35 } });
@@ -52,9 +52,44 @@ test('Beispieldaten und Screenshots', async ({ page, request }) => {
     await expect(page.getByText('Notizen')).toBeVisible();
     await page.waitForTimeout(300);
     await shot(page, 'inbox', scheme);
+    await page.goto('/umleiten?app=instagram');
+    await expect(page.getByText('Kurz was Kleines zuerst?')).toBeVisible();
+    await page.waitForTimeout(300);
+    await shot(page, 'umleiten', scheme);
     await page.goto('/profil');
     await expect(page.getByText('Dabei seit').first()).toBeVisible();
     await shot(page, 'profil', scheme);
-    await page.goto('/willkommen');
+    await page.goto('/kalender');
+    await expect(page.getByText('Wo finde ich die Adresse?')).toBeVisible();
+    await shot(page, 'kalender', scheme);
   }
+
+  // Fokus-Modus: laufender Block, ruhig (ein Durchgang, danach beendet)
+  await request.post('/api/tasks', { data: { title: 'Angebot fertig schreiben', minutes: 50 } });
+  const tasks = (await (await request.get('/api/tasks')).json()) as { id: string; title: string }[];
+  const run = await request.post('/api/focus/start', {
+    data: { taskId: tasks.find((t) => t.title === 'Angebot fertig schreiben')!.id },
+  });
+  const session = (await run.json()) as { id: string };
+  for (const scheme of ['dark', 'light'] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    await page.goto('/fokus-modus');
+    await expect(page.getByText('Nach diesem Block')).toBeVisible();
+    await shot(page, 'fokus-modus', scheme);
+  }
+  await request.post(`/api/focus/${session.id}/finish`, { data: {} });
+  // Willkommensseite: ohne Anmeldung
+  const anon = await browser.newContext({
+    storageState: { cookies: [], origins: [] },
+    viewport: { width: 390, height: 844 },
+  });
+  const ap = await anon.newPage();
+  for (const scheme of ['dark', 'light'] as const) {
+    await ap.emulateMedia({ colorScheme: scheme });
+    await ap.goto('/willkommen');
+    await expect(ap.getByText('Tagesplan')).toBeVisible();
+    await ap.waitForTimeout(400);
+    await shot(ap, 'willkommen', scheme);
+  }
+  await anon.close();
 });

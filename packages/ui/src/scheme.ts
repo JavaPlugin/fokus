@@ -42,9 +42,31 @@ export const ForceScheme = ({
 }) => createElement(Forced.Provider, { value: scheme }, children);
 
 /** Wirksames Schema: fester Bereich, sonst Wahl, sonst System. */
+const media = () =>
+  typeof window !== 'undefined' && window.matchMedia
+    ? window.matchMedia('(prefers-color-scheme: dark)')
+    : null;
+const subscribeSystem = (cb: () => void) => {
+  const m = media();
+  m?.addEventListener('change', cb);
+  return () => m?.removeEventListener('change', cb);
+};
+const systemNow = (): 'light' | 'dark' => (media()?.matches ? 'dark' : 'light');
+
+/**
+ * System-Schema. Im Web mit festem Server-Wert „hell“: die statische Seite wird hell gerendert,
+ * beim Hydrieren rechnet React danach neu und passt die Farben an (der Hook von React Native
+ * liefert beim Hydrieren schon den Browserwert, dann blieben die hellen Inline-Farben stehen).
+ */
+function useSystemScheme(): 'light' | 'dark' | null | undefined {
+  // Platform.OS ändert sich zur Laufzeit nie: die Hook-Reihenfolge bleibt gleich
+  if (Platform.OS !== 'web') return useColorScheme() as 'light' | 'dark' | null;
+  return useSyncExternalStore(subscribeSystem, systemNow, () => 'light' as const);
+}
+
 export function useScheme(): 'light' | 'dark' {
   const forced = useContext(Forced);
-  const system = useColorScheme();
+  const system = useSystemScheme();
   const c = useSchemeChoice();
   if (forced) return forced;
   return c === 'system' ? (system === 'light' ? 'light' : 'dark') : c;

@@ -2,7 +2,12 @@
 
 Alle Versionen von FOKUS. Installiert wird über Admin-Panel → System (Tag `vX.Y.Z` auf `main`).
 
-## Unveröffentlicht
+## 1.0.0 – 10. Oktober 2026
+
+Erster Stand von FOKUS: Tagesplaner, der Social Media einplant. Produktive Zeit verdient Scroll-Zeit. Details je Phase unten.
+
+- **Behoben:** Im Dunkelmodus erschienen die statisch vorgerenderten Seiten (Willkommen, Umleiten) hell. Die Farben folgen jetzt dem System, auch beim Hydrieren.
+- Screenshots in `docs/screenshots`, neues Vorschaubild, Version 1.0.0.
 
 ### Phase 6: Fokus-Partner und Smart Home
 
