@@ -3,6 +3,8 @@ import {
   Body,
   BlockRow,
   Button,
+  Chip,
+  Chips,
   Hero,
   KindCard,
   SymbolIcon,
@@ -37,7 +39,7 @@ const endOf = (b: Block) => new Date(b.startsAt).getTime() + b.minutes * MIN_MS;
 export default function Heute() {
   const p = usePalette();
   const focusText = useKindText('focus');
-  const { data, error, planToday, startFocus } = useDay();
+  const { data, error, planToday, startFocus, setEnergy, fillGap } = useDay();
   const [now, setNow] = useState(Date.now());
   const [open, setOpen] = useState<Block | null>(null);
   const [social, setSocial] = useState(false);
@@ -194,6 +196,28 @@ export default function Heute() {
       )}
       {note ? <Body muted>{note}</Body> : null}
 
+      {!data.energy && new Date(now).getHours() < 14 ? (
+        <View style={{ backgroundColor: p.surface, borderRadius: 20, padding: 16, gap: 12 }}>
+          <Text style={[type.body, { color: p.ink, fontFamily: font.semibold }]}>
+            Wie viel Energie hast du heute?
+          </Text>
+          <Text style={[type.small, { color: p.ink2 }]}>
+            Bei hoher Energie kommen schwere Aufgaben in deine Hochphase, bei niedriger zuletzt.
+          </Text>
+          <Chips>
+            {(
+              [
+                ['low', 'Niedrig'],
+                ['normal', 'Normal'],
+                ['high', 'Hoch'],
+              ] as const
+            ).map(([k, l]) => (
+              <Chip key={k} label={l} onPress={() => void setEnergy(k)} />
+            ))}
+          </Chips>
+        </View>
+      ) : null}
+
       <View style={{ gap: 12 }}>
         <View
           style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' }}
@@ -226,6 +250,44 @@ export default function Heute() {
           <Button label="Neu planen" variant="secondary" loading={busy} onPress={plan} />
         ) : null}
       </View>
+
+      {data.gaps.length ? (
+        <View style={{ gap: 10 }}>
+          <Text accessibilityRole="header" style={[type.section, { color: p.ink, fontSize: 22 }]}>
+            Lücken
+          </Text>
+          {data.gaps.slice(0, 3).map((g) => {
+            const tasks = g.suggestions
+              .map((id) => data.tasks.find((t) => t.id === id))
+              .filter((t): t is NonNullable<typeof t> => !!t);
+            return (
+              <View
+                key={g.startsAt}
+                style={{ backgroundColor: p.surface, borderRadius: 18, padding: 14, gap: 10 }}
+              >
+                <Text style={[type.body, { color: p.ink }]}>
+                  Frei: {g.minutes} Min. ab {clock(g.startsAt)}
+                </Text>
+                {tasks.length ? (
+                  <Chips>
+                    {tasks.map((t) => (
+                      <Chip
+                        key={t.id}
+                        label={`${t.title} · ${t.minutes} Min.`}
+                        onPress={() => void fillGap(g, t.id, t.minutes)}
+                      />
+                    ))}
+                  </Chips>
+                ) : (
+                  <Text style={[type.small, { color: p.ink3 }]}>
+                    Keine passende kleine Aufgabe.
+                  </Text>
+                )}
+              </View>
+            );
+          })}
+        </View>
+      ) : null}
 
       <Button label="Social-Slot planen" variant="secondary" onPress={() => setSocial(true)} />
       <BlockSheet block={open} onClose={() => setOpen(null)} />

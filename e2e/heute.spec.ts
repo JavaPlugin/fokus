@@ -21,7 +21,7 @@ test('Aufgabe erfassen, Tag planen, Fokus starten und erledigen', async ({ page 
 
   await page.getByRole('button', { name: 'Tag planen' }).click();
   await expect(page.getByText('Angebot schreiben').first()).toBeVisible();
-  await expect(page.getByText('Dein Tag')).toBeVisible();
+  await expect(page.getByText('Dein Tag', { exact: true })).toBeVisible();
 
   await page.getByRole('button', { name: 'Fokus starten' }).click();
   await expect(page).toHaveURL(/\/fokus-modus$/);

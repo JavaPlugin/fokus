@@ -6,7 +6,7 @@
 // in Fokus-Blöcke geschnitten; nach einem vollen Block folgt eine Pause, wenn noch Arbeit wartet.
 // Mini-Aufgaben bleiben draußen (Lücken-Füller und „Umleiten“).
 import { MIN_MS, instant, type Day } from './dates';
-import type { Interval, Peak, PlanSettings, TaskLite } from './model';
+import type { Energy, Interval, Peak, PlanSettings, TaskLite } from './model';
 
 export interface PlannedBlock {
   kind: 'focus' | 'pause';
@@ -27,6 +27,8 @@ export interface PlanInput {
   tasks: TaskLite[];
   /** Hochphasen für schwere Aufgaben */
   peaks?: Peak[];
+  /** Energie heute: niedrig = Schweres zuletzt und ohne Hochphase, hoch/normal = Schweres in die Hochphase */
+  energy?: Energy;
 }
 
 export interface PlanResult {
@@ -78,12 +80,12 @@ export function workWindow(day: Day, s: PlanSettings, now?: number): Interval | 
 const minutesOf = (i: Interval) => Math.floor((i.end - i.start) / MIN_MS);
 
 /** Reihenfolge: überfällig/früh fällig zuerst, schwere vor leichten, lange vor kurzen. */
-function order(tasks: TaskLite[]): TaskLite[] {
+function order(tasks: TaskLite[], heavyLast = false): TaskLite[] {
   return [...tasks].sort((a, b) => {
     const da = a.due ?? '9999-99-99';
     const db = b.due ?? '9999-99-99';
     if (da !== db) return da < db ? -1 : 1;
-    if (a.heavy !== b.heavy) return a.heavy ? -1 : 1;
+    if (a.heavy !== b.heavy) return a.heavy !== heavyLast ? -1 : 1;
     if (a.minutes !== b.minutes) return b.minutes - a.minutes;
     return a.id < b.id ? -1 : 1;
   });
@@ -94,12 +96,16 @@ export function planDay(input: PlanInput): PlanResult {
   const win = workWindow(day, s, input.now);
   if (!win) return { blocks: [], unplaced: [] };
   let free = subtract(win, input.busy);
-  const peaks: Interval[] = (input.peaks ?? [])
+  const low = input.energy === 'low';
+  const peaks: Interval[] = (low ? [] : (input.peaks ?? []))
     .map((p) => ({ start: instant(day, p.from), end: instant(day, p.to) }))
     .filter((p) => p.end > p.start);
 
   const blocks: PlannedBlock[] = [];
-  const queue = order(input.tasks.filter((t) => !t.mini && t.minutes > 0));
+  const queue = order(
+    input.tasks.filter((t) => !t.mini && t.minutes > 0),
+    low,
+  );
   const unplaced: PlanResult['unplaced'] = [];
 
   /** Belegt [start, start+minutes) in der freien Zeit. */

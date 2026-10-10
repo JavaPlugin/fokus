@@ -163,6 +163,24 @@ describe('Tagesplan', () => {
   });
 });
 
+describe('Energie', () => {
+  const tasks = [task('schwer', 50, { heavy: true }), task('leicht', 30)];
+  const peaks = [{ from: '10:00', to: '12:00' }];
+
+  it('niedrig: Leichtes zuerst, Schweres zuletzt, Hochphase gilt nicht', () => {
+    const r = planDay({ day: DAY, settings: S, busy: [], tasks, peaks, energy: 'low' });
+    expect(show(r)).toEqual(['09:00 focus leicht 30', '09:30 focus schwer 50']);
+  });
+
+  it('hoch und normal: Schweres in die Hochphase', () => {
+    for (const energy of ['high', 'normal'] as const)
+      expect(show(planDay({ day: DAY, settings: S, busy: [], tasks, peaks, energy }))).toEqual([
+        '09:00 focus leicht 30',
+        '10:00 focus schwer 50',
+      ]);
+  });
+});
+
 describe('Lücken-Füller', () => {
   it('freie Lücken ab 15 Min. (kleinere zählen nicht)', () => {
     const g = freeGaps(

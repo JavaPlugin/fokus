@@ -27,6 +27,7 @@ import { registerTaskRoutes } from './task-routes';
 import { registerDayRoutes } from './day-routes';
 import { registerRedirectRoutes } from './redirect-routes';
 import { registerWeekRoutes } from './week-routes';
+import { registerCalendarRoutes } from './calendar-routes';
 import { createPush, type PushSend } from './push';
 import { createMailer, e2eOutbox, type Mailer } from './mail';
 import { loadEmailTemplates, registerEmailTemplateRoutes } from './email-templates';
@@ -71,6 +72,8 @@ export interface AppDeps {
   /** Für Tests: Webhook-Zustellung und DNS-Auflösung. */
   webhookFetch?: typeof fetch;
   webhookResolve?: Resolve;
+  /** Für Tests: Abruf von Kalender-Adressen. */
+  calendarFetch?: typeof fetch;
   /** Täglichen Erinnerungs-Job starten (nur im echten Server, nicht in Tests). */
   jobs?: boolean;
 }
@@ -94,6 +97,7 @@ export function createApp({
   jobs,
   webhookFetch,
   webhookResolve,
+  calendarFetch,
 }: AppDeps) {
   const push = createPush(db, env.PUBLIC_URL, pushSend);
   const mail = mailer ?? createMailer(env);
@@ -402,6 +406,7 @@ export function createApp({
   registerDayRoutes(app, { db });
   registerRedirectRoutes(app, { db });
   registerWeekRoutes(app, { db });
+  registerCalendarRoutes(app, { db, fetchFn: calendarFetch, resolve: webhookResolve });
   registerApiKeyRoutes(app, { db });
   registerWebhookRoutes(app, { db, hooks, resolve: webhookResolve });
 

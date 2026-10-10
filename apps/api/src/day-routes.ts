@@ -14,6 +14,7 @@ import {
 } from '@fokus/core';
 import {
   creditEntry,
+  energyDay,
   focusSession,
   task,
   timeBlock,
@@ -54,6 +55,7 @@ const settingsInput = z
     streakGoal: z.number().int().min(1).max(600),
     redirectBonus: z.number().int().min(0).max(30),
     redirectSpend: z.number().int().min(1).max(60),
+    peaks: z.array(z.object({ from: hhmm, to: hhmm }).refine((p) => p.from < p.to)).max(4),
   })
   .partial()
   .refine((s) => !s.workStart || !s.workEnd || s.workStart < s.workEnd, {
@@ -110,6 +112,8 @@ export function registerDayRoutes(app: Hono<Vars>, { db }: { db: Db }) {
         .where(and(gte(timeBlock.startsAt, from), lt(timeBlock.startsAt, to)))
         .orderBy(asc(timeBlock.startsAt));
       const open = await tx.select().from(task).where(eq(task.status, 'open'));
+      const energy =
+        (await tx.select().from(energyDay).where(eq(energyDay.day, d.data)))[0]?.level ?? null;
       const sessions = await tx
         .select()
         .from(focusSession)
@@ -139,6 +143,7 @@ export function registerDayRoutes(app: Hono<Vars>, { db }: { db: Db }) {
       return {
         day: d.data,
         settings,
+        energy,
         blocks: blocks.map(blockOut),
         tasks: open.map(taskOut),
         credit: creditSummary(entries, todayIn(), settings),
@@ -156,6 +161,24 @@ export function registerDayRoutes(app: Hono<Vars>, { db }: { db: Db }) {
       };
     });
     return c.json(out);
+  });
+
+  // ---------- Energie am Morgen ----------
+
+  app.put('/api/energy/:day', async (c) => {
+    const u = authed(c);
+    if (u instanceof Response) return u;
+    const d = day.safeParse(c.req.param('day'));
+    if (!d.success) return c.json({ error: d.error.issues[0]!.message }, 400);
+    const b = await parseBody(c, z.object({ level: z.enum(['low', 'normal', 'high']) }));
+    if (b instanceof Response) return b;
+    await withUser(db, u.id, (tx) =>
+      tx
+        .insert(energyDay)
+        .values({ userId: u.id, day: d.data, level: b.level })
+        .onConflictDoUpdate({ target: [energyDay.userId, energyDay.day], set: { level: b.level } }),
+    );
+    return c.json({ day: d.data, level: b.level });
   });
 
   // ---------- Zeitblöcke ----------
@@ -296,12 +319,15 @@ export function registerDayRoutes(app: Hono<Vars>, { db }: { db: Db }) {
         .map(lite)
         .map((t) => ({ ...t, minutes: t.minutes - (done.get(t.id) ?? 0) }))
         .filter((t) => t.minutes > 0);
+      const energy = (await tx.select().from(energyDay).where(eq(energyDay.day, d.data)))[0]?.level;
       const plan = planDay({
         day: d.data,
         now: d.data === today ? now : undefined,
         settings,
         busy,
         tasks,
+        peaks: settings.peaks,
+        energy,
       });
       const titles = new Map(open.map((t) => [t.id, t.title]));
       const made = plan.blocks.length

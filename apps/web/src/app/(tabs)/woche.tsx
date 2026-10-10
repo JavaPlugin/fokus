@@ -13,6 +13,7 @@ type Week = WeekSummary & {
   streakGoal: number;
   baselineScroll: number;
   tasksDone: number;
+  energy: Record<string, 'low' | 'normal' | 'high'>;
 };
 
 const WD = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
@@ -195,6 +196,35 @@ export default function Woche() {
                 >
                   {WD[i]}
                 </Text>
+              </View>
+            );
+          })}
+        </View>
+      </View>
+
+      <View style={{ backgroundColor: p.surface, borderRadius: 20, padding: 16, gap: 10 }}>
+        <Text style={[type.small, { color: p.ink2, fontSize: 12 }]}>Energie am Morgen</Text>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+          {w.days.map((d, i) => {
+            const e = w.energy[d.day];
+            return (
+              <View
+                key={d.day}
+                accessible
+                accessibilityLabel={`${WD[i]}: ${e === 'high' ? 'hoch' : e === 'low' ? 'niedrig' : e === 'normal' ? 'normal' : 'nicht angegeben'}`}
+                style={{ alignItems: 'center', gap: 6, width: 30 }}
+              >
+                <View style={{ height: 16, justifyContent: 'flex-end' }}>
+                  <View
+                    style={{
+                      width: 12,
+                      height: e === 'high' ? 16 : e === 'normal' ? 10 : e === 'low' ? 5 : 3,
+                      borderRadius: 3,
+                      backgroundColor: e ? p.ink : p.surface2,
+                    }}
+                  />
+                </View>
+                <Text style={[type.small, { fontSize: 11, color: p.ink3 }]}>{WD[i]}</Text>
               </View>
             );
           })}

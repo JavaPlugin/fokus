@@ -49,6 +49,10 @@ Auftrag und Konzept: `PROMPT.md`. Design-Entwürfe: `design/` (HTML, im Browser 
 
 - Phase 4: `GET /api/week/:tag` (`week-routes.ts`): Fokus je Tag aus fertigen `focus_session`, Social je Tag aus ausgegebenem Guthaben (`spentOn`), Zeit-Konto `weekSummary` (Basis `baselineScroll` × vergangene Tage − Social), Serie über 120 Tage, erledigte Aufgaben. Screen `(tabs)/woche.tsx` (Balken Fokus/Social, Wochenwechsel, Gegenwert `equivalents`: Kapitel ≈ 2 Std., Training ≈ 2,5 Std.). Rückblick = Tagesrückblick (Phase 3) plus Zeile mit bestem Tag und erledigten Aufgaben auf der Woche. Profil → Planung (`components/PlanSettings.tsx`) stellt Fokus/Pause/Guthaben/Limit/Arbeitstag/Basis ein.
 
+- Phase 5: Kalender: `packages/core/src/ics.ts` (`parseIcs(text, von, bis)`: UTC, TZID, DURATION, Wiederholungen DAILY/WEEKLY(BYDAY)/MONTHLY/YEARLY mit INTERVAL/COUNT/UNTIL/EXDATE, ganztägig und abgesagt ausgeschlossen, Wiederholung bleibt zur lokalen Uhrzeit über die Zeitumstellung). `apps/api/src/calendar-routes.ts`: Abo-Adressen nur HTTPS, `webcal://` → `https://`, nie Heimnetz (`checkTarget` aus webhooks, auch nach jeder Weiterleitung, 4 Sprünge, 2 MB, 15 s), Adresse wird nie zurückgegeben. Termine = `time_block` (kind event, source calendar, `feed_id` + `ext_id` = UID@Tag, Upsert, Entferntes verschwindet), Fenster gestern bis +21 Tage. Abgleich: `POST /api/calendar/sync` (Server drosselt auf 10 Min., `?force=1`), die App ruft ihn aus `DayProvider.reload()` höchstens alle 10 Min. Seite `app/kalender.tsx` (Profil-Kachel).
+- Phase 5: Energie: Tabelle `energy_day` (Tag → niedrig/normal/hoch), `PUT /api/energy/:tag`; `planDay` bekommt `energy` und `peaks` (`PlanSettings.peaks`, Standard 09–12 Uhr): niedrig = Schweres zuletzt und ohne Hochphase, sonst Schweres zuerst in die Hochphase. Heute fragt vormittags (vor 14 Uhr) „Wie viel Energie…“ und plant bei vorhandenem Plan neu. Woche zeigt die Energie je Tag.
+- Phase 5: Lücken-Füller: `GET /api/day` liefert Lücken ≥ 15 Min. mit Vorschlägen (`suggestForGap`); Heute zeigt bis zu 3, Tippen legt einen Fokus-Block in die Lücke (`fillGap`).
+
 ## Befehle
 
 ```bash

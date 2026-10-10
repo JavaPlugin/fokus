@@ -97,6 +97,15 @@ export default function Profil() {
       wide: true,
     },
     {
+      id: 'kalender',
+      symbol: 'datei' as const,
+      color: accents.orange.from,
+      title: 'Kalender',
+      detail: 'Google, Apple: Termine blockieren Zeit',
+      keys: 'kalender ics google apple outlook termine sync abo',
+      onPress: () => router.push('/kalender'),
+    },
+    {
       id: 'plan',
       symbol: 'uhr',
       color: accents.blue.from,

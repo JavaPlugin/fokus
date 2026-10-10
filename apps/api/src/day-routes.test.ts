@@ -496,3 +496,36 @@ describe('Woche', () => {
     expect((await req('GET', '/api/week/kaputt')).status).toBe(400);
   });
 });
+
+describe('Energie und Hochphasen', () => {
+  it('niedrige Energie: Schweres zuletzt; Hochphase aus den Einstellungen; Tagesansicht und Woche zeigen sie', async () => {
+    const day = TOMORROW();
+    await req('POST', '/api/tasks', { title: 'Schwer', minutes: 50, heavy: true });
+    await req('POST', '/api/tasks', { title: 'Leicht', minutes: 30 });
+    const peaks = [{ from: '11:00', to: '13:00' }];
+    expect((await req('PUT', '/api/plan/settings', { peaks })).status).toBe(200);
+    expect(
+      (await req('PUT', '/api/plan/settings', { peaks: [{ from: '13:00', to: '11:00' }] })).status,
+    ).toBe(400);
+
+    const high = await req<{ blocks: Block[] }>('POST', `/api/plan/${day}`);
+    expect(high.data.blocks.map((b) => `${clock(b.startsAt)} ${b.title}`)).toEqual([
+      '09:00 Leicht',
+      '11:00 Schwer',
+    ]);
+
+    expect((await req('PUT', `/api/energy/${day}`, { level: 'low' })).status).toBe(200);
+    const low = await req<{ blocks: Block[] }>('POST', `/api/plan/${day}`);
+    expect(low.data.blocks.map((b) => `${clock(b.startsAt)} ${b.title}`)).toEqual([
+      '09:00 Leicht',
+      '09:30 Schwer',
+    ]);
+
+    const o = await req<{ energy: string | null }>('GET', `/api/day/${day}`);
+    expect(o.data.energy).toBe('low');
+    expect(
+      (await req<{ energy: Record<string, string> }>('GET', `/api/week/${day}`)).data.energy[day],
+    ).toBe('low');
+    expect((await req('PUT', `/api/energy/${day}`, { level: 'mega' })).status).toBe(400);
+  });
+});

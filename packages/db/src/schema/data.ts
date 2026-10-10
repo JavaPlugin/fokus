@@ -44,6 +44,7 @@ export const userSettings = pgTable('user_settings', {
     streakGoal?: number;
     redirectBonus?: number;
     redirectSpend?: number;
+    peaks?: { from: string; to: string }[];
   }>(),
   updatedAt: timestamp('updated_at', { withTimezone: true })
     .notNull()
@@ -72,6 +73,32 @@ export const task = pgTable(
   (t) => [index('task_user_status').on(t.userId, t.status)],
 );
 
+/** Kalender-Abo (ICS-Adresse von Google, Apple …). Termine kommen als belegte Blöcke. */
+export const calendarFeed = pgTable(
+  'calendar_feed',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: owner(),
+    name: text('name').notNull(),
+    url: text('url').notNull(),
+    lastSyncAt: timestamp('last_sync_at', { withTimezone: true, mode: 'date' }),
+    lastError: text('last_error'),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+  },
+  (t) => [index('calendar_feed_user').on(t.userId)],
+);
+
+/** Energie am Morgen (niedrig, normal, hoch), ein Eintrag pro Tag. */
+export const energyDay = pgTable(
+  'energy_day',
+  {
+    userId: owner(),
+    day: date('day', { mode: 'string' }).notNull(),
+    level: text('level', { enum: ['low', 'normal', 'high'] }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.day] })],
+);
+
 /** Zeitblock im Kalender: Fokus, Pause, Social-Slot oder Termin. */
 export const timeBlock = pgTable(
   'time_block',
@@ -90,9 +117,15 @@ export const timeBlock = pgTable(
     source: text('source', { enum: ['plan', 'manual', 'calendar'] })
       .notNull()
       .default('manual'),
+    /** Kalender-Abo und Kennung des Termins darin (nur bei source = calendar) */
+    feedId: uuid('feed_id').references(() => calendarFeed.id, { onDelete: 'cascade' }),
+    extId: text('ext_id'),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
   },
-  (t) => [index('time_block_user_start').on(t.userId, t.startsAt)],
+  (t) => [
+    index('time_block_user_start').on(t.userId, t.startsAt),
+    unique('time_block_feed_ext').on(t.userId, t.feedId, t.extId),
+  ],
 );
 
 /** Ein Fokus-Durchgang (Timer). `focusedMinutes` = tatsächlich gearbeitet. */

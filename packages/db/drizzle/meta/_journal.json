@@ -36,6 +36,20 @@
       "when": 1791624681500,
       "tag": "0004_reminders_admin",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1791625272384,
+      "tag": "0005_calendar_energy",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791625272908,
+      "tag": "0006_calendar_energy_rls",
+      "breakpoints": true
     }
   ]
 }

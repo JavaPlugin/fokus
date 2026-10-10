@@ -46,6 +46,7 @@ export type Gap = { startsAt: string; minutes: number; suggestions: string[] };
 export type DayData = {
   day: string;
   settings: PlanSettings;
+  energy: 'low' | 'normal' | 'high' | null;
   blocks: Block[];
   tasks: Task[];
   credit: CreditSummary;
@@ -84,6 +85,10 @@ interface DayApi {
   ) => Promise<{ focusedMinutes: number; earned: number }>;
   setBlockStatus: (id: string, status: Block['status']) => Promise<void>;
   removeBlock: (id: string) => Promise<void>;
+  /** Energie heute setzen (und neu planen, wenn schon geplant war) */
+  setEnergy: (level: 'low' | 'normal' | 'high') => Promise<void>;
+  /** Freie Lücke mit einer Aufgabe füllen */
+  fillGap: (gap: Gap, taskId: string, minutes: number) => Promise<void>;
   spend: (
     minutes: number,
     reason: 'social' | 'redirect',
@@ -106,10 +111,16 @@ export function DayProvider({ children }: { children: ReactNode }) {
   const [notes, setNotes] = useState<Note[] | null>(null);
   const [error, setError] = useState('');
   const started = useRef(false);
+  const lastSync = useRef(0);
 
   const reload = useCallback(async () => {
     started.current = true;
     try {
+      // Kalender-Abos höchstens alle 10 Minuten abgleichen (der Server drosselt zusätzlich)
+      if (Date.now() - lastSync.current > 10 * 60_000) {
+        lastSync.current = Date.now();
+        await api('/api/calendar/sync', { method: 'POST', body: {} }).catch(() => undefined);
+      }
       const [d, n] = await Promise.all([
         api<DayData>(`/api/day/${todayIn()}`),
         api<Note[]>('/api/inbox'),
@@ -169,6 +180,19 @@ export function DayProvider({ children }: { children: ReactNode }) {
       setBlockStatus: (id, status) =>
         then(api(`/api/blocks/${id}`, { method: 'PUT', body: { status } })),
       removeBlock: (id) => then(api(`/api/blocks/${id}`, { method: 'DELETE' })),
+      setEnergy: async (level) => {
+        await api(`/api/energy/${todayIn()}`, { method: 'PUT', body: { level } });
+        // War heute schon geplant, passt FOKUS den Plan an die Energie an
+        if (data?.blocks.some((b) => b.source === 'plan' && b.status === 'planned'))
+          await api(`/api/plan/${todayIn()}`, { method: 'POST', body: {} }).catch(() => undefined);
+        await reload();
+      },
+      fillGap: (gap, taskId, minutes) =>
+        then(
+          api('/api/blocks', {
+            body: { kind: 'focus', startsAt: gap.startsAt, minutes, taskId, title: '' },
+          }),
+        ),
       spend: (minutes, reason, blockId) =>
         then(
           api<{ granted: number; short: number }>('/api/credit/spend', {

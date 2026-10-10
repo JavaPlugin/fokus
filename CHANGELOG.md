@@ -4,6 +4,12 @@ Alle Versionen von FOKUS. Installiert wird über Admin-Panel → System (Tag `vX
 
 ## Unveröffentlicht
 
+### Phase 5: Kalender, Energie, Lücken
+
+- Kalender-Sync per ICS-Adresse (Google, Apple, Outlook): Termine blockieren Zeit im Tagesplan, Wiederholungen werden aufgelöst.
+- Energie-Kalender: morgens Energie wählen; schwere Aufgaben kommen in die Hochphase (bei niedriger Energie zuletzt). Verlauf in der Woche.
+- Lücken-Füller: freie 15 Minuten und mehr mit passenden kleinen Aufgaben zum Einplanen per Tipp.
+
 ### Phase 4: Woche
 
 - Woche: „Vom Scrollen zurückgeholt“ als Zeit-Konto, Balken Fokus und Social pro Tag, Fokus-Zeit, Serie, Gegenwert in Kapiteln und Trainings, Wochen blättern.

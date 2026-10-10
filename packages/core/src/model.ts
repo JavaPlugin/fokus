@@ -25,7 +25,13 @@ export interface PlanSettings {
   redirectBonus: number;
   /** „Umleiten“: so viele Minuten nimmt „vom Guthaben nehmen“ */
   redirectSpend: number;
+  /** Hochphasen für schwere Aufgaben (Standard: vormittags) */
+  peaks: Peak[];
 }
+
+/** Energie am Morgen (Energie-Kalender). */
+export type Energy = 'low' | 'normal' | 'high';
+export const ENERGY_LEVELS: Energy[] = ['low', 'normal', 'high'];
 
 export const DEFAULT_SETTINGS: PlanSettings = {
   focusMinutes: 50,
@@ -38,6 +44,7 @@ export const DEFAULT_SETTINGS: PlanSettings = {
   streakGoal: 60,
   redirectBonus: 3,
   redirectSpend: 10,
+  peaks: [{ from: '09:00', to: '12:00' }],
 };
 
 /** Was die Planung von einer Aufgabe wissen muss. */

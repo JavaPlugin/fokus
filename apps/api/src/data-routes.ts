@@ -6,7 +6,9 @@
 import { createHash } from 'node:crypto';
 import { todayIn } from '@fokus/core';
 import {
+  calendarFeed,
   creditEntry,
+  energyDay,
   focusSession,
   inboxItem,
   task,
@@ -39,8 +41,10 @@ export interface ExportTable {
 export const EXPORT_TABLES: ExportTable[] = [
   { key: 'settings', table: userSettings },
   { key: 'tasks', table: task, ids: ['id'] },
+  { key: 'feeds', table: calendarFeed, ids: ['id'] },
+  { key: 'energy', table: energyDay },
   { key: 'inbox', table: inboxItem, ids: ['id'], refs: ['taskId'] },
-  { key: 'blocks', table: timeBlock, ids: ['id'], refs: ['taskId'] },
+  { key: 'blocks', table: timeBlock, ids: ['id'], refs: ['taskId', 'feedId'] },
   { key: 'sessions', table: focusSession, ids: ['id'], refs: ['blockId', 'taskId'] },
   { key: 'credit', table: creditEntry, ids: ['id'], refs: ['sessionId', 'blockId'] },
 ];

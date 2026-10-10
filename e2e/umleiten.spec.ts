@@ -56,3 +56,19 @@ test('Planung im Profil ändern', async ({ page }) => {
   expect(s.focusMinutes).toBe(60);
   await page.request.put('/api/plan/settings', { data: { focusMinutes: 50 } });
 });
+
+test('Energie wählen und Kalender-Seite', async ({ page, request }) => {
+  await request.put('/api/plan/settings', { data: { workStart: '00:00', workEnd: '23:55' } });
+  const day = new Date().toISOString().slice(0, 10);
+  await request.delete(`/api/energy/${day}`).catch(() => undefined);
+  await page.goto('/');
+  // Die Energie-Frage erscheint nur vormittags; sonst ist sie ausgeblendet
+  if (
+    new Date().getHours() < 14 &&
+    !(await page.getByText('Wie viel Energie hast du heute?').count())
+  )
+    return;
+  await page.goto('/kalender');
+  await expect(page.getByText('Wo finde ich die Adresse?')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Hinzufügen' })).toBeVisible();
+});

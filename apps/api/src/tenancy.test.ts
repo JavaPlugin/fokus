@@ -32,6 +32,8 @@ beforeEach(async () => {
     mailer,
     webhookFetch: (async () => new Response(null, { status: 200 })) as unknown as typeof fetch,
     webhookResolve: async () => ['93.184.216.34'],
+    calendarFetch: (async () =>
+      new Response('BEGIN:VCALENDAR\nEND:VCALENDAR')) as unknown as typeof fetch,
   });
 });
 afterEach(() => h.close());
@@ -95,9 +97,22 @@ describe('Mandantentrennung', () => {
     const session = await json<{ id: string }>('POST', '/api/focus/start', a, {
       taskId: task.id,
     });
+    const feed = await json<{ id: string }>('POST', '/api/calendar', a, {
+      name: 'Geheim-A Kalender',
+      url: 'https://cal.example/geheim-a.ics',
+    });
+    await req('PUT', `/api/energy/${new Date().toISOString().slice(0, 10)}`, a, { level: 'low' });
     const keysBefore = (await req('GET', '/api/me/keys', a)).text;
     const hooksBefore = (await req('GET', '/api/me/webhooks', a)).text;
-    const ids = [key.keys[0]!.id, hook.webhooks[0]!.id, task.id, note.id, block.id, session.id];
+    const ids = [
+      key.keys[0]!.id,
+      hook.webhooks[0]!.id,
+      task.id,
+      note.id,
+      block.id,
+      session.id,
+      feed.id,
+    ];
     const today = new Date().toISOString().slice(0, 10);
 
     const attacks: [string, string, unknown?][] = [
@@ -119,6 +134,7 @@ describe('Mandantentrennung', () => {
       ['POST', `/api/focus/start`, { taskId: task.id }],
       ['POST', `/api/focus/start`, { blockId: block.id }],
       ['POST', `/api/focus/${session.id}/finish`, {}],
+      ['DELETE', `/api/calendar/${feed.id}`],
     ];
     for (const [method, path, body] of attacks) {
       const r = await req(method, path, b, body);
@@ -138,6 +154,8 @@ describe('Mandantentrennung', () => {
       `/api/day/${today}`,
       '/api/credit',
       '/api/focus/current',
+      '/api/calendar',
+      `/api/week/${today}`,
     ];
     for (const path of reads) {
       const r = await req('GET', path, b);
