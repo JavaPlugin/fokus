@@ -66,6 +66,12 @@ Auftrag und Konzept: `PROMPT.md`. Design-Entwürfe: `design/` (HTML, im Browser 
 - Auftrag 2: Web: Tabs Heute · Aufgaben · (+) · Woche · Fokus; Plus tippen = `TaskSheet` (Anlegen und Bearbeiten), lang drücken = schnell notieren (später, 30 Min). Kreis = erledigt mit Rückgängig-Toast (`lib/undo.tsx`), Antippen = Bearbeiten, Löschen nur im Sheet oder per Wischen, immer mit Rückgängig. Seite `app/arbeitszeiten.tsx` (Profil), Einführung in 3 Schritten (Prinzip, Arbeitszeiten, erste Aufgabe).
 - Auftrag 2: Browser-Tests räumen mit `clearTasks` (`e2e/setup.ts`) auf, damit jeder Test mit leerem Plan startet.
 
+- Fix Umleiten (Branch `fix-umleiten`): **Freigabe nur durch ausgegebenes Guthaben.** `packages/core/src/pass.ts`: Freigaben ergeben sich aus dem Buch (`passesOf`: Ausgaben mit Grund `social`/`redirect`/`override`, eine Ausgabe während einer Freigabe verlängert sie), `gateState` (Fokus läuft → `focus`, Freigabe → `free`, sonst `blocked`). Ein geplanter Social-Slot gibt nichts frei. Kein Schema-Wechsel (Grund `override` ist nur ein TS-Enum).
+- Fix Umleiten: Kurzbefehl fragt `GET /api/v1/gate/<schlüssel>?app=…` (Text: `frei` oder Adresse von `/umleiten?app=…&k=<schlüssel>`; falscher Schlüssel → `…&fehler=adresse`). Schlüssel = `api_key` mit Recht `gate`, `POST /api/me/gate-key` ersetzt den alten, Klartext nur einmal (Web merkt ihn in `fk.gateUrl`). Automation: Inhalt von URL abrufen → Wenn enthält „umleiten“ → URLs öffnen. `/umleiten` ist öffentlich (`PUBLIC_PATHS`) und nutzt Sitzung oder Schlüssel (`api(…, { token })`).
+- Fix Umleiten: Routen `/api/v1/redirect` (Stand + Ticket), `/spend` (redirectSpend), `/override` (Ticket ≥ 15 s alt, HMAC mit `BETTER_AUTH_SECRET`, 5 Min auch ins Minus, 3 pro Tag), `/done` (nur offene Mini-Aufgabe ≤ 2 Min, erst nach ihrer Dauer, kein Guthaben). Bonus fürs Umleiten entfällt (`redirectBonus` bleibt nur für alte Daten). `/api/credit/spend` und Umleiten antworten 409 während eines Fokus-Blocks.
+- Fix Umleiten: Lockerungen (`creditPerHour`↑, `dailyLimit`↑, `redirectSpend`↓, `baselineScroll`↑, `streakGoal`↓) landen in `user_settings.plan.pending` (`{ from: morgen, values }`) und gelten erst ab dann (`resolvePlan` in `planning.ts`); Strengeres sofort. Fokus-Block höchstens 120 Min (`FOCUS_MAX`), Guthaben nur für die geplante Zeit. Erinnerung „Social-Zeit vorbei“ (nur Push, Schlüssel `pass:{ende}`).
+- Fix Umleiten: CI läuft auch bei Push auf `fix-**`.
+
 ## Befehle
 
 ```bash

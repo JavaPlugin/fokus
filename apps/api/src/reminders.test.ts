@@ -103,3 +103,17 @@ describe('Erinnerungen', () => {
     expect((await r.tick(new Date(instant(DAY, '21:30')))).recaps).toBe(0);
   });
 });
+
+describe('Social-Zeit vorbei', () => {
+  it('einmal kurz nach dem Ende der Freigabe, nur als Push', async () => {
+    const { r } = setup();
+    const start = new Date(instant(DAY, '18:00'));
+    await h.db.insert(creditEntry).values({ userId: a, at: start, minutes: -20, reason: 'social' });
+    const end = start.getTime() + 20 * 60_000;
+    expect((await r.tick(new Date(end - 60_000))).passes).toBe(0);
+    expect((await r.tick(new Date(end))).passes).toBe(1);
+    expect((await r.tick(new Date(end + 30_000))).passes).toBe(0);
+    expect((await r.tick(new Date(end + 5 * 60_000))).passes).toBe(0);
+    expect(outbox).toEqual([]);
+  });
+});

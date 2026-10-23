@@ -74,6 +74,8 @@ export type DayData = {
   credit: CreditSummary;
   focusMinutes: number;
   running: Running | null;
+  /** Laufende Social-Freigabe (aus ausgegebenem Guthaben) */
+  pass: { until: string } | null;
 };
 
 /** Eingabe beim Anlegen und Ändern einer Aufgabe. */
@@ -110,7 +112,7 @@ interface DayApi {
   spend: (
     minutes: number,
     reason: 'social' | 'redirect',
-  ) => Promise<{ granted: number; short: number }>;
+  ) => Promise<{ granted: number; short: number; passUntil: string | null }>;
 }
 
 const Ctx = createContext<DayApi | null>(null);
@@ -185,7 +187,7 @@ export function DayProvider({ children }: { children: ReactNode }) {
         ),
       spend: (minutes, reason) =>
         then(
-          api<{ granted: number; short: number }>('/api/credit/spend', {
+          api<{ granted: number; short: number; passUntil: string | null }>('/api/credit/spend', {
             body: { minutes, reason },
           }),
         ),

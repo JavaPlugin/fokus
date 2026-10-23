@@ -9,3 +9,4 @@ export * from './gaps';
 export * from './streak';
 export * from './week';
 export * from './ics';
+export * from './pass';

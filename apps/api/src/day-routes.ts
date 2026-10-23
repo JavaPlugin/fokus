@@ -1,12 +1,16 @@
 // Einstellungen, der Tag (Tagesplan), Fokus-Durchgänge und Scroll-Guthaben.
 import {
   DEFAULT_SETTINGS,
+  activePass,
+  addDays,
   creditSummary,
   dayInZone,
   earnedFor,
   minutesBetween,
   spend,
+  splitSettingsChange,
   todayIn,
+  type PlanSettings,
 } from '@fokus/core';
 import {
   creditEntry,
@@ -31,9 +35,14 @@ import {
   loadCredit,
   loadSettings,
   parseBody,
+  resolvePlan,
   taskOut,
   uuid,
+  type PendingSettings,
 } from './planning';
+
+/** Ein Fokus-Durchgang dauert höchstens so lange (längere Aufgaben = mehrere Blöcke). */
+export const FOCUS_MAX = 120;
 
 const minutes = z.number().int().min(1).max(600);
 const hours = z
@@ -61,12 +70,29 @@ export function registerDayRoutes(app: Hono<Vars>, { db }: { db: Db }) {
 
   // ---------- Einstellungen (Arbeitszeiten und Regeln) ----------
 
+  type Stored = Partial<PlanSettings> & { pending?: PendingSettings };
+  const settingsOut = (own: Partial<PlanSettings>, pending: PendingSettings | null) => ({
+    ...DEFAULT_SETTINGS,
+    ...own,
+    week: own.week ?? DEFAULT_SETTINGS.week,
+    /** Lockerungen, die erst ab `from` gelten */
+    pending,
+  });
+
   app.get('/api/plan/settings', async (c) => {
     const u = authed(c);
     if (u instanceof Response) return u;
-    return c.json(await withUser(db, u.id, loadSettings));
+    const [row] = await withUser(db, u.id, (tx) =>
+      tx.select({ p: userSettings.plan }).from(userSettings),
+    );
+    const { own, pending } = resolvePlan(row?.p as Stored | null);
+    return c.json(settingsOut(own, pending));
   });
 
+  /**
+   * Strengeres gilt sofort, Lockerungen (mehr Guthaben, höheres Limit …) erst ab morgen. So lässt
+   * sich das Guthaben nicht im Moment der Versuchung hochdrehen.
+   */
   app.put('/api/plan/settings', async (c) => {
     const u = authed(c);
     if (u instanceof Response) return u;
@@ -74,13 +100,24 @@ export function registerDayRoutes(app: Hono<Vars>, { db }: { db: Db }) {
     if (b instanceof Response) return b;
     return c.json(
       await withUser(db, u.id, async (tx) => {
+        const today = todayIn();
         const [row] = await tx.select({ p: userSettings.plan }).from(userSettings);
-        const stored = { ...(row?.p ?? {}), ...b };
+        const { own, pending } = resolvePlan(row?.p as Stored | null, today);
+        const current = settingsOut(own, null);
+        const { now, later } = splitSettingsChange(current, b as Partial<PlanSettings>);
+        const waiting: Record<string, unknown> = { ...(pending?.values ?? {}) };
+        for (const k of Object.keys(now)) delete waiting[k];
+        Object.assign(waiting, later);
+        const nextOwn = { ...own, ...now };
+        const nextPending = Object.keys(waiting).length
+          ? { from: addDays(today, 1), values: waiting as Partial<PlanSettings> }
+          : null;
+        const stored = nextPending ? { ...nextOwn, pending: nextPending } : nextOwn;
         await tx
           .insert(userSettings)
           .values({ userId: u.id, plan: stored })
           .onConflictDoUpdate({ target: userSettings.userId, set: { plan: stored } });
-        return { ...DEFAULT_SETTINGS, ...stored };
+        return settingsOut(nextOwn, nextPending);
       }),
     );
   });
@@ -115,6 +152,10 @@ export function registerDayRoutes(app: Hono<Vars>, { db }: { db: Db }) {
         gaps: gapsOf(agenda, d.data, now, today, later),
         waiting: agenda.waiting.map(taskOut),
         credit: creditSummary(entries, today, agenda.settings),
+        pass: (() => {
+          const p = activePass(entries, now);
+          return p ? { until: new Date(p.end).toISOString() } : null;
+        })(),
         focusMinutes,
         running: running
           ? {
@@ -177,7 +218,7 @@ export function registerDayRoutes(app: Hono<Vars>, { db }: { db: Db }) {
           userId: u.id,
           taskId: t?.id ?? null,
           startedAt: new Date(),
-          plannedMinutes: Math.min(planned, 600),
+          plannedMinutes: Math.min(planned, FOCUS_MAX),
         })
         .returning();
       return { session: s!, title: t?.title ?? '' };
@@ -217,7 +258,8 @@ export function registerDayRoutes(app: Hono<Vars>, { db }: { db: Db }) {
         .update(focusSession)
         .set({ endedAt: now, focusedMinutes: focused, status })
         .where(eq(focusSession.id, id));
-      const earned = earnedFor(focused, settings.creditPerHour);
+      // Guthaben nur für die geplante Zeit: ein vergessener Timer bringt nichts extra
+      const earned = earnedFor(Math.min(focused, s.plannedMinutes), settings.creditPerHour);
       if (earned > 0)
         await tx.insert(creditEntry).values({
           userId: u.id,
@@ -287,20 +329,31 @@ export function registerDayRoutes(app: Hono<Vars>, { db }: { db: Db }) {
     if (u instanceof Response) return u;
     const b = await parseBody(c, z.object({ minutes, reason: z.enum(['social', 'redirect']) }));
     if (b instanceof Response) return b;
-    return c.json(
-      await withUser(db, u.id, async (tx) => {
-        const settings = await loadSettings(tx);
-        const entries = await loadCredit(tx);
-        const today = todayIn();
-        const r = spend(entries, b.minutes, today, settings.dailyLimit);
-        if (r.granted > 0) {
-          await tx
-            .insert(creditEntry)
-            .values({ userId: u.id, minutes: -r.granted, reason: b.reason });
-          entries.push({ at: new Date().toISOString(), minutes: -r.granted, reason: b.reason });
-        }
-        return { ...r, credit: creditSummary(entries, today, settings) };
-      }),
-    );
+    const res = await withUser(db, u.id, async (tx) => {
+      const [running] = await tx
+        .select({ id: focusSession.id })
+        .from(focusSession)
+        .where(eq(focusSession.status, 'running'));
+      if (running) return { error: 'Erst den Fokus-Block beenden.' };
+      const settings = await loadSettings(tx);
+      const entries = await loadCredit(tx);
+      const today = todayIn();
+      const r = spend(entries, b.minutes, today, settings.dailyLimit);
+      const at = new Date();
+      if (r.granted > 0) {
+        await tx
+          .insert(creditEntry)
+          .values({ userId: u.id, at, minutes: -r.granted, reason: b.reason });
+        entries.push({ at: at.toISOString(), minutes: -r.granted, reason: b.reason });
+      }
+      const p = activePass(entries, at.getTime());
+      return {
+        ...r,
+        passUntil: p ? new Date(p.end).toISOString() : null,
+        credit: creditSummary(entries, today, settings),
+      };
+    });
+    if ('error' in res) return c.json({ error: res.error }, 409);
+    return c.json(res);
   });
 }

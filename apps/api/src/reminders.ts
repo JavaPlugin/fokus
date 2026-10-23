@@ -7,6 +7,7 @@ import {
   addDays,
   clock,
   instant,
+  passesOf,
   spentOn,
   type CreditEntry,
 } from '@fokus/core';
@@ -20,6 +21,7 @@ import {
   type Db,
 } from '@fokus/db';
 import { and, gte, lt } from 'drizzle-orm';
+import { loadCredit } from './planning';
 import { buildAgenda } from './agenda';
 import { berlin, type Notifier } from './notify';
 import { recapMail, reminderMail } from './mail-templates';
@@ -72,6 +74,37 @@ export function createReminders({
               }),
           },
           `block:${i.key}`,
+        );
+        if (ok) sent++;
+      }
+    }
+    return sent;
+  }
+
+  /**
+   * Freigabe gerade abgelaufen: iOS lässt eine Web-App keine andere App schließen, also wenigstens
+   * ein Push „Social-Zeit vorbei“ (nur wenn Push an ist, keine Mail).
+   */
+  async function passEnds(now: Date) {
+    const lo = now.getTime() - MIN_MS;
+    const users = await db.select({ id: user.id }).from(user);
+    let sent = 0;
+    for (const u of users) {
+      const ended = await withUser(db, u.id, async (tx) =>
+        passesOf(await loadCredit(tx)).filter((p) => p.end > lo && p.end <= now.getTime()),
+      );
+      for (const p of ended) {
+        const ok = await notifier.send(
+          u.id,
+          'social',
+          {
+            push: {
+              title: 'Social-Zeit vorbei',
+              body: 'Zurück zu deinem Plan. Neue Zeit gibt es mit dem nächsten Fokus-Block.',
+              url: '/',
+            },
+          },
+          `pass:${new Date(p.end).toISOString()}`,
         );
         if (ok) sent++;
       }
@@ -137,7 +170,11 @@ export function createReminders({
   return {
     /** Ein Durchlauf (jede Minute). */
     async tick(now = new Date()) {
-      return { blocks: await blockReminders(now), recaps: await recaps(now) };
+      return {
+        blocks: await blockReminders(now),
+        passes: await passEnds(now),
+        recaps: await recaps(now),
+      };
     },
     start(everyMs = 60_000) {
       const t = setInterval(() => void this.tick().catch(() => undefined), everyMs);

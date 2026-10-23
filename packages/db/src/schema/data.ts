@@ -44,6 +44,8 @@ export const userSettings = pgTable('user_settings', {
     streakGoal?: number;
     redirectBonus?: number;
     redirectSpend?: number;
+    /** Lockerungen, die erst ab `from` (Tag) gelten. */
+    pending?: { from: string; values: Record<string, unknown> };
   }>(),
   updatedAt: timestamp('updated_at', { withTimezone: true })
     .notNull()
@@ -184,7 +186,9 @@ export const creditEntry = pgTable(
     userId: owner(),
     at: timestamp('at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
     minutes: integer('minutes').notNull(),
-    reason: text('reason', { enum: ['focus', 'social', 'redirect', 'adjust'] }).notNull(),
+    reason: text('reason', {
+      enum: ['focus', 'social', 'redirect', 'override', 'adjust'],
+    }).notNull(),
     sessionId: uuid('session_id').references(() => focusSession.id, { onDelete: 'set null' }),
     blockId: uuid('block_id').references(() => timeBlock.id, { onDelete: 'set null' }),
   },

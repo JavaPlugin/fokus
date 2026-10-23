@@ -6,20 +6,22 @@ import type { Context, Hono } from 'hono';
 import { z } from 'zod';
 import type { SessionUser, Vars } from './app';
 
-export const SCOPES = ['inbox:create'] as const;
+/** `gate`: nur „Darf die Social-App auf?“ und Umleiten (Kurzbefehl beim Öffnen einer App). */
+export const SCOPES = ['inbox:create', 'gate'] as const;
 export type Scope = (typeof SCOPES)[number];
 
 const hashKey = (key: string) => createHash('sha256').update(key).digest('hex');
 
-/** Schlüssel aus „Authorization: Bearer fk_…“ prüfen. Liefert Nutzer oder Fehlerantwort. */
-export async function keyAuth(
+/** Schlüssel „fk_…“ prüfen (aus Header oder Adresse). Liefert Nutzer oder Fehlerantwort. */
+export async function tokenAuth(
   db: Db,
   c: Context,
+  token: string | undefined,
   scope: Scope,
 ): Promise<{ userId: string } | Response> {
-  const m = /^Bearer\s+(fk_[A-Za-z0-9_-]{20,})$/.exec(c.req.header('authorization') ?? '');
-  if (!m) return c.json({ error: 'API-Schlüssel fehlt.' }, 401);
-  const hash = hashKey(m[1]!);
+  if (!token || !/^fk_[A-Za-z0-9_-]{20,}$/.test(token))
+    return c.json({ error: 'API-Schlüssel fehlt.' }, 401);
+  const hash = hashKey(token);
   const [row] = await withKeyLookup(db, async (tx) => {
     const found = await tx
       .select({ userId: apiKey.userId, scopes: apiKey.scopes })
@@ -33,6 +35,19 @@ export async function keyAuth(
   if (!row.scopes.includes(scope))
     return c.json({ error: `Dem Schlüssel fehlt das Recht ${scope}.` }, 403);
   return { userId: row.userId };
+}
+
+/** Token aus „Authorization: Bearer fk_…“. */
+export const bearerOf = (c: Context) =>
+  /^Bearer\s+(fk_[A-Za-z0-9_-]{20,})$/.exec(c.req.header('authorization') ?? '')?.[1];
+
+/** Schlüssel aus „Authorization: Bearer fk_…“ prüfen. Liefert Nutzer oder Fehlerantwort. */
+export const keyAuth = (db: Db, c: Context, scope: Scope) => tokenAuth(db, c, bearerOf(c), scope);
+
+/** Neuen Schlüssel erzeugen: Klartext (nur jetzt sichtbar) und was gespeichert wird. */
+export function newKey() {
+  const key = `fk_${randomBytes(24).toString('base64url')}`;
+  return { key, prefix: key.slice(0, 9), hash: hashKey(key) };
 }
 
 export function registerApiKeyRoutes(app: Hono<Vars>, { db }: { db: Db }) {

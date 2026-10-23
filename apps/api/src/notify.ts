@@ -87,14 +87,15 @@ export function createNotifier({
   async function send(
     userId: string,
     kind: NotifyKind | 'test',
-    msg: { push: PushMessage; mail: (to: string) => Mail },
+    /** Ohne `mail` nur als Push (z. B. „Social-Zeit vorbei“). */
+    msg: { push: PushMessage; mail?: (to: string) => Mail },
     key?: string,
   ): Promise<boolean> {
     const p = await prefs(userId);
     if (kind !== 'test' && !p[kind]) return false;
     if (key && !(await claim(userId, key))) return false;
     if (p.channel !== 'email') await push.notify(userId, msg.push).catch(() => undefined);
-    if (p.channel !== 'app') {
+    if (p.channel !== 'app' && msg.mail) {
       const to = await emailOf(userId);
       if (to) await mailer.send(msg.mail(to)).catch(() => undefined);
     }

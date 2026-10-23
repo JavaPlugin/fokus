@@ -15,17 +15,29 @@ const ORDER = [1, 2, 3, 4, 5, 6, 0];
 const FALLBACK: Hours = { from: '09:00', to: '17:00' };
 
 type Open = null | 'day' | 'focus' | 'credit';
+/** Lockerungen gelten erst ab `from` (Tag). */
+type Settings = PlanSettings & {
+  pending: { from: string; values: Partial<PlanSettings> } | null;
+};
+
+const LABELS: Partial<Record<keyof PlanSettings, (v: number) => string>> = {
+  creditPerHour: (v) => `${v} Min Guthaben pro Fokus-Std`,
+  dailyLimit: (v) => `höchstens ${v} Min am Tag`,
+  redirectSpend: (v) => `${v} Min beim Umleiten`,
+  baselineScroll: (v) => `übliche Scroll-Zeit ${v} Min`,
+  streakGoal: (v) => `Serie ab ${v} Min`,
+};
 
 export default function Arbeitszeiten() {
   const day = useDay();
   const undo = useUndo();
-  const [s, setS] = useState<PlanSettings | null>(null);
+  const [s, setS] = useState<Settings | null>(null);
   const [error, setError] = useState('');
   const [sel, setSel] = useState<number | null>(null);
   const [sheet, setSheet] = useState<Open>(null);
 
   useEffect(() => {
-    api<PlanSettings>('/api/plan/settings')
+    api<Settings>('/api/plan/settings')
       .then(setS)
       .catch((e: Error) => setError(e.message));
   }, []);
@@ -36,9 +48,11 @@ export default function Arbeitszeiten() {
     setS({ ...s, ...patch });
     setError('');
     try {
-      setS(await api<PlanSettings>('/api/plan/settings', { method: 'PUT', body: patch }));
+      const next = await api<Settings>('/api/plan/settings', { method: 'PUT', body: patch });
+      setS(next);
       void day.reload();
-      undo.notify(message);
+      const later = Object.keys(patch).some((k) => next.pending && k in next.pending.values);
+      undo.notify(later ? 'Lockerung gilt ab morgen' : message);
     } catch (e) {
       setS(prev);
       setError((e as Error).message);
@@ -54,6 +68,20 @@ export default function Arbeitszeiten() {
 
   if (!s) return <Screen title="Arbeitszeiten">{error ? <Body muted>{error}</Body> : null}</Screen>;
   const h = sel === null ? null : s.week[sel];
+  // Gewählt anzeigen, was ab morgen gilt (sonst sähe die Auswahl wie nicht gespeichert aus)
+  const shown = { ...s, ...(s.pending?.values ?? {}) } as PlanSettings;
+  const pendingText = s.pending
+    ? (Object.entries(s.pending.values) as [keyof PlanSettings, number][])
+        .map(([k, v]) => LABELS[k]?.(v))
+        .filter(Boolean)
+        .join(', ')
+    : '';
+  const pendingNote = pendingText ? (
+    <Body muted>
+      Ab morgen: {pendingText}. Lockerungen gelten erst am nächsten Tag, damit du sie nicht im
+      Moment der Versuchung machst. Strengere Regeln gelten sofort.
+    </Body>
+  ) : null;
 
   return (
     <Screen title="Arbeitszeiten">
@@ -92,8 +120,10 @@ export default function Arbeitszeiten() {
         <Body muted>
           Das Guthaben ist deine Scroll-Zeit: Je Stunde Fokus bekommst du {s.creditPerHour} Minuten
           für Social Media. Mehr als {s.dailyLimit} Minuten am Tag gibt FOKUS nicht aus. Einen
-          Social-Slot legst du als Aufgabe an (Art „Social“, Wiederholen „Täglich“).
+          Social-Slot legst du als Aufgabe an (Art „Social“, Wiederholen „Täglich“). Frei wird
+          Social Media erst, wenn du ihn startest: Das kostet Guthaben.
         </Body>
+        {pendingNote}
       </Section>
       {error ? <Body muted>{error}</Body> : null}
 
@@ -175,7 +205,7 @@ export default function Arbeitszeiten() {
               <Chip
                 key={m}
                 label={`${m} Min`}
-                selected={s.creditPerHour === m}
+                selected={shown.creditPerHour === m}
                 onPress={() => void save({ creditPerHour: m })}
               />
             ))}
@@ -187,7 +217,7 @@ export default function Arbeitszeiten() {
               <Chip
                 key={m}
                 label={`${m} Min`}
-                selected={s.dailyLimit === m}
+                selected={shown.dailyLimit === m}
                 onPress={() => void save({ dailyLimit: m })}
               />
             ))}
@@ -199,13 +229,14 @@ export default function Arbeitszeiten() {
               <Chip
                 key={m}
                 label={`${m} Min`}
-                selected={s.baselineScroll === m}
+                selected={shown.baselineScroll === m}
                 onPress={() => void save({ baselineScroll: m })}
               />
             ))}
           </Chips>
         </Section>
         <Body muted>Damit rechnet FOKUS in der Woche, wie viel Scroll-Zeit du zurückholst.</Body>
+        {pendingNote}
       </Sheet>
     </Screen>
   );

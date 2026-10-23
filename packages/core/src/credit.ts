@@ -3,7 +3,7 @@
 import { dayInZone, type Day } from './dates';
 import type { PlanSettings } from './model';
 
-export type CreditReason = 'focus' | 'social' | 'redirect' | 'adjust';
+export type CreditReason = 'focus' | 'social' | 'redirect' | 'override' | 'adjust';
 
 export interface CreditEntry {
   /** Zeitpunkt (ISO) */

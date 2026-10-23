@@ -12,28 +12,49 @@ test.beforeEach(async ({ request }) => {
   });
 });
 
-test('Umleiten: Aufgabe machen bringt Guthaben, Guthaben nehmen zieht ab', async ({
+test('Umleiten: ohne Guthaben zu, Aufgabe mit Uhr, Guthaben nehmen gibt frei', async ({
   page,
   request,
+  browser,
+  baseURL,
 }) => {
   await request.post('/api/tasks', { data: { title: 'Lena antworten', minutes: 2 } });
   await page.goto('/umleiten?app=instagram');
   await expect(page.getByText('Kurz was Kleines zuerst?')).toBeVisible();
   await expect(page.getByText('Lena antworten')).toBeVisible();
+  // Aufgabe: erst nach ihrer Dauer erledigt
   await page.getByRole('button', { name: 'Aufgabe machen' }).click();
-  await expect(page.getByText('Geschafft.')).toBeVisible();
-  await expect(page.getByText(/\+3 Min Scroll-Guthaben/)).toBeVisible();
+  await expect(page.getByRole('button', { name: /Erledigt \(in \d+ s\)/ })).toBeDisabled();
+  await page.getByRole('button', { name: 'Abbrechen' }).click();
+  // Ausnahme erst nach der Wartezeit
+  await expect(page.getByRole('button', { name: /Trotzdem öffnen geht in \d+ s/ })).toBeVisible();
 
-  await page.goto('/umleiten?app=tiktok');
-  await page.getByRole('button', { name: /10 Min vom Guthaben nehmen/ }).click();
-  await expect(page.getByText('Viel Spaß.')).toBeVisible();
-  await expect(page.getByText(/3 Min vom Guthaben genommen/)).toBeVisible();
+  await request.post('/api/e2e/credit', { data: { minutes: 10 } });
+  await page.reload();
+  await page.getByRole('button', { name: '10 Min vom Guthaben nehmen' }).click();
+  await expect(page.getByText(/^Bis \d\d:\d\d frei\.$/)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Instagram öffnen' })).toBeVisible();
+
+  // Der Kurzbefehl fragt nach: jetzt frei, also keine Schleife zurück zu FOKUS
+  const { key } = (await (await request.post('/api/me/gate-key', { data: {} })).json()) as {
+    key: string;
+  };
+  expect(await (await request.get(`/api/v1/gate/${key}?app=instagram`)).text()).toBe('frei');
+  // Umleiten-Seite ohne Sitzung (Safari), nur mit Schlüssel
+  const fresh = await browser.newContext({ baseURL, locale: 'de-DE' });
+  const safari = await fresh.newPage();
+  await safari.goto(`/umleiten?app=instagram&k=${key}`);
+  await expect(safari.getByText(/^Bis \d\d:\d\d frei\.$/)).toBeVisible();
+  await fresh.close();
 });
 
-test('Profil zeigt die Umleiten-Anleitung', async ({ page }) => {
+test('Profil zeigt die Umleiten-Anleitung mit persönlicher Adresse', async ({ page }) => {
   await page.goto('/einfuehrung?wieder=1&schritt=umleiten');
   await expect(page.getByText('Umleiten statt sperren')).toBeVisible();
+  await page.getByRole('button', { name: /Adresse erstellen/ }).click();
   await expect(page.getByRole('button', { name: 'Adresse kopieren' })).toBeVisible();
+  await page.getByRole('button', { name: 'Adresse testen' }).click();
+  await expect(page.getByText(/^Funktioniert\./)).toBeVisible();
 });
 
 test('Woche zeigt Zeit-Konto und Serie', async ({ page }) => {

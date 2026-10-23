@@ -4,6 +4,7 @@ import {
   addDays,
   dayInZone,
   instant,
+  todayIn,
   type CreditEntry,
   type Day,
   type PlanSettings,
@@ -21,10 +22,25 @@ export const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Ungültiger Tag.');
 export const hhmm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Ungültige Uhrzeit.');
 export const uuid = z.uuid();
 
-/** Einstellungen: Standardwerte aus dem Kern, darüber die eigenen. */
+/** Gelockerte Einstellungen, die erst ab einem Tag gelten (siehe splitSettingsChange). */
+export type PendingSettings = { from: Day; values: Partial<PlanSettings> };
+type StoredPlan = Partial<PlanSettings> & { pending?: PendingSettings };
+
+/** Gespeicherte Werte mit fälligen Lockerungen verrechnet, dazu was noch aussteht. */
+export function resolvePlan(
+  stored: StoredPlan | null | undefined,
+  today: Day = todayIn(),
+): { own: Partial<PlanSettings>; pending: PendingSettings | null } {
+  const { pending, ...own } = stored ?? {};
+  if (pending && pending.from <= today)
+    return { own: { ...own, ...pending.values }, pending: null };
+  return { own, pending: pending ?? null };
+}
+
+/** Einstellungen: Standardwerte aus dem Kern, darüber die eigenen (fällige Lockerungen inklusive). */
 export async function loadSettings(tx: Db): Promise<PlanSettings> {
   const [row] = await tx.select({ p: userSettings.plan }).from(userSettings);
-  const own = (row?.p ?? {}) as Partial<PlanSettings>;
+  const { own } = resolvePlan(row?.p as StoredPlan | null);
   return { ...DEFAULT_SETTINGS, ...own, week: own.week ?? DEFAULT_SETTINGS.week };
 }
 

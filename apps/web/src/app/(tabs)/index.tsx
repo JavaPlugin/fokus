@@ -87,11 +87,16 @@ export default function Heute() {
     try {
       if (i.kind === 'social') {
         const r = await day.spend(i.minutes, 'social');
+        if (r.granted <= 0) {
+          setNote('Kein Guthaben für Social-Zeit. Starte erst einen Fokus-Block.');
+          return;
+        }
         await day.setDone(i.taskId, i.day, true);
+        const until = r.passUntil ? ` bis ${clock(r.passUntil)}` : '';
         undo.notify(
           r.short > 0
-            ? `Social-Zeit gestartet: ${r.granted} von ${i.minutes} Min. vom Guthaben (mehr war nicht da)`
-            : `Social-Zeit gestartet: ${r.granted} Min. vom Guthaben`,
+            ? `Social-Zeit${until}: ${r.granted} von ${i.minutes} Min. (mehr Guthaben war nicht da)`
+            : `Social-Zeit${until}: ${r.granted} Min. vom Guthaben`,
         );
       } else {
         await day.startFocus({ taskId: i.taskId, minutes: i.minutes });
@@ -112,7 +117,13 @@ export default function Heute() {
         label="Scroll-Guthaben"
         value={String(data.credit.balance)}
         unit="Min"
-        sub={`Je 1 Std. Fokus bekommst du ${perHour} Min. für Social Media.`}
+        sub={
+          data.pass
+            ? `Social-Zeit läuft bis ${clock(data.pass.until)}. Danach leitet FOKUS wieder um.`
+            : data.credit.balance < 0
+              ? `Minus aus Ausnahmen. Der nächste Fokus-Block zahlt es zurück (je 1 Std. = ${perHour} Min.).`
+              : `Je 1 Std. Fokus bekommst du ${perHour} Min. für Social Media.`
+        }
       />
 
       {next ? (

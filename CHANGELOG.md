@@ -2,6 +2,15 @@
 
 Alle Versionen von FOKUS. Installiert wird über Admin-Panel → System (Tag `vX.Y.Z` auf `main`).
 
+## Nächste Version – Umleiten, das wirklich funktioniert
+
+- **Behoben: Schleife beim Öffnen von Instagram.** Die alte Automation öffnete FOKUS bei jedem Start der App, auch direkt nach dem Bezahlen. Jetzt fragt der Kurzbefehl vorher bei FOKUS nach (persönliche Adresse, Profil → Umleiten) und lässt die App offen, solange Social-Zeit läuft.
+- **Behoben: Social-Slot gab keine Freigabe.** Wer einen Slot startet oder Guthaben nimmt, bekommt genau so viele Minuten frei. Ein bloß geplanter Slot gibt nichts frei, erst sein Start (Guthaben).
+- **Schlupflöcher geschlossen:** kein Gratis-Guthaben mehr fürs Umleiten; „Trotzdem öffnen“ erst nach 15 s, kostet 5 Min (auch ins Minus) und geht höchstens 3-mal am Tag; während eines Fokus-Blocks bleibt die App zu; mehr Guthaben pro Stunde oder ein höheres Limit gelten erst ab morgen; ein vergessener Timer bringt kein Extra-Guthaben, ein Block dauert höchstens 120 Min.
+- Mitteilung „Social-Zeit vorbei“, Heute zeigt laufende Social-Zeit und Minus.
+- Umleiten-Seite klappt auch in Safari ohne Anmeldung (Schlüssel in der Adresse).
+- **Nach dem Update:** Profil → Umleiten öffnen, Adresse erstellen und die Automation neu anlegen (alte mit „URL öffnen“ löschen).
+
 ## 1.1.0 – Einfacher und verständlicher
 
 - **Eine Sache: die Aufgabe.** Art (Arbeit, Pause, Social), Dauer, Wann (automatisch, feste Zeit, später) und Wiederholung (täglich, werktags, wöchentlich). Notizen und Inbox entfallen, Notizen werden zu Aufgaben „Später“.

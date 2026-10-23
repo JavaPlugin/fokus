@@ -1,6 +1,6 @@
 import { addDays, clock, instant, todayIn, weekday } from '@fokus/core';
 import { createDb, creditEntry, type DbHandle } from '@fokus/db';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from './app';
 import { createAuth } from './auth';
 import { onEvent } from './events';
@@ -81,6 +81,7 @@ type DayData = {
   gaps: { start: string; minutes: number; suggestion: { taskId: string; title: string } | null }[];
   credit: { balance: number };
   running: { id: string } | null;
+  pass: { until: string } | null;
   focusMinutes: number;
 };
 const get = async (d: string) => (await req<DayData>('GET', `/api/day/${d}`)).data;
@@ -174,7 +175,11 @@ describe('Aufgaben', () => {
 
 describe('Einstellungen und Arbeitszeiten', () => {
   it('Standard Mo–Fr 09:00–17:00; ändern; Fehler', async () => {
-    type S = { week: ({ from: string; to: string } | null)[]; creditPerHour: number };
+    type S = {
+      week: ({ from: string; to: string } | null)[];
+      creditPerHour: number;
+      pending: { from: string; values: Record<string, number> } | null;
+    };
     const s = await req<S>('GET', '/api/plan/settings');
     expect(s.data.week.map((h) => (h ? `${h.from}-${h.to}` : 'frei'))).toEqual([
       'frei',
@@ -188,9 +193,10 @@ describe('Einstellungen und Arbeitszeiten', () => {
     const week = [...s.data.week];
     week[5] = { from: '09:00', to: '14:00' };
     week[6] = { from: '10:00', to: '12:00' };
-    const up = await req<S>('PUT', '/api/plan/settings', { week, creditPerHour: 20 });
+    const up = await req<S>('PUT', '/api/plan/settings', { week, creditPerHour: 10 });
     expect(up.data.week[5]).toEqual({ from: '09:00', to: '14:00' });
-    expect(up.data.creditPerHour).toBe(20);
+    expect(up.data.creditPerHour).toBe(10);
+    expect(up.data.pending).toBeNull();
     expect((await req<S>('GET', '/api/plan/settings')).data.week[6]).toEqual({
       from: '10:00',
       to: '12:00',
@@ -204,6 +210,38 @@ describe('Einstellungen und Arbeitszeiten', () => {
       ).status,
     ).toBe(400);
     expect((await req('PUT', '/api/plan/settings', { creditPerHour: 99 })).status).toBe(400);
+  });
+  it('Lockerungen gelten erst ab morgen, Strengeres sofort', async () => {
+    type S = {
+      creditPerHour: number;
+      dailyLimit: number;
+      pending: { from: string; values: Record<string, number> } | null;
+    };
+    const tomorrow = addDays(todayIn(), 1);
+    const up = await req<S>('PUT', '/api/plan/settings', { creditPerHour: 60, dailyLimit: 30 });
+    expect(up.data).toMatchObject({
+      creditPerHour: 15,
+      dailyLimit: 30,
+      pending: { from: tomorrow, values: { creditPerHour: 60 } },
+    });
+    // Guthaben heute weiter mit 15 pro Stunde
+    const t = await req<Task>('POST', '/api/tasks', { title: 'Konzept', minutes: 60 });
+    const f = await req<{ id: string }>('POST', '/api/focus/start', { taskId: t.data.id });
+    await h.db.execute(
+      `update focus_session set started_at = now() - interval '60 minutes' where id = '${f.data.id}'` as never,
+    );
+    const end = await req<{ earned: number }>('POST', `/api/focus/${f.data.id}/finish`, {});
+    expect(end.data.earned).toBe(15);
+    // zurück auf den alten Wert: nichts steht mehr aus
+    const back = await req<S>('PUT', '/api/plan/settings', { creditPerHour: 15 });
+    expect(back.data.pending).toBeNull();
+    // fällige Lockerung gilt (als wäre morgen schon heute)
+    await req('PUT', '/api/plan/settings', { dailyLimit: 120 });
+    await h.db.execute(
+      `update user_settings set plan = jsonb_set(plan, '{pending,from}', to_jsonb('${todayIn()}'::text))` as never,
+    );
+    const later = await req<S>('GET', '/api/plan/settings');
+    expect(later.data).toMatchObject({ dailyLimit: 120, pending: null });
   });
 });
 
@@ -496,6 +534,26 @@ describe('Fokus und Guthaben', () => {
     );
   });
 
+  it('vergessener Timer bringt nichts extra; ein Block höchstens 120 Min', async () => {
+    const t = await req<Task>('POST', '/api/tasks', { title: 'Lang', minutes: 600 });
+    const s0 = await req<{ id: string; plannedMinutes: number }>('POST', '/api/focus/start', {
+      taskId: t.data.id,
+      minutes: 600,
+    });
+    expect(s0.data.plannedMinutes).toBe(120);
+    await req('POST', `/api/focus/${s0.data.id}/finish`, {});
+    const s = await req<{ id: string }>('POST', '/api/focus/start', { minutes: 50 });
+    await h.db.execute(
+      `update focus_session set started_at = now() - interval '80 minutes' where id = '${s.data.id}'` as never,
+    );
+    const r = await req<{ focusedMinutes: number; earned: number }>(
+      'POST',
+      `/api/focus/${s.data.id}/finish`,
+      {},
+    );
+    expect(r.data).toMatchObject({ focusedMinutes: 80, earned: 12 });
+  });
+
   it('Guthaben ausgeben: Rest des Guthabens und Tageslimit', async () => {
     await h.db.insert(creditEntry).values({ userId, minutes: 40, reason: 'focus' });
     const a = await req<{ granted: number; short: number; credit: { balance: number } }>(
@@ -534,43 +592,40 @@ describe('Fokus und Guthaben', () => {
 describe('Umleiten', () => {
   type R = {
     label: string;
-    insideSlot: boolean;
+    state: 'free' | 'focus' | 'blocked';
+    passUntil: string | null;
+    focus: { title: string } | null;
     nextSocial: string | null;
-    task: { id: string; title: string } | null;
+    task: { id: string; title: string; minutes: number } | null;
     fallback: string;
-    bonus: number;
     spend: number;
+    canSpend: number;
+    credit: { balance: number };
+    override: { left: number; cost: number; waitSeconds: number };
+    ticket: string;
   };
-
-  it('kurze Aufgabe als Vorschlag, Bonus höchstens 3-mal am Tag, Fallback ohne Aufgabe', async () => {
-    const empty = await req<R>('GET', '/api/redirect?app=instagram');
-    expect(empty.data).toMatchObject({
-      label: 'Instagram',
-      insideSlot: false,
-      task: null,
-      bonus: 3,
-      spend: 10,
+  const info = async (app = 'instagram') =>
+    (await req<R>('GET', `/api/v1/redirect?app=${app}`)).data;
+  const gateKey = async () =>
+    (await req<{ key: string; gateUrl: string }>('POST', '/api/me/gate-key', {})).data;
+  const gate = async (key: string, name = 'instagram') =>
+    (await app.request(`/api/v1/gate/${key}?app=${name}`)).text();
+  const withKey = async <T>(key: string, method: string, path: string, body?: unknown) => {
+    const res = await app.request(path, {
+      method,
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
+      body: body === undefined ? undefined : JSON.stringify(body),
     });
-    expect(empty.data.fallback.length).toBeGreaterThan(3);
-    const m = await req<Task>('POST', '/api/tasks', { title: 'Lena antworten', minutes: 2 });
-    expect((await req<R>('GET', '/api/redirect?app=tiktok')).data.task).toMatchObject({
-      id: m.data.id,
-    });
-    const done = await req<{ bonus: number; credit: { balance: number } }>(
-      'POST',
-      '/api/redirect/done',
-      { taskId: m.data.id },
-    );
-    expect(done.data).toMatchObject({ bonus: 3, credit: { balance: 3 } });
-    await req('POST', '/api/redirect/done', {});
-    await req('POST', '/api/redirect/done', {});
-    const fourth = await req<{ bonus: number }>('POST', '/api/redirect/done', {});
-    expect(fourth.data.bonus).toBe(0);
-    expect((await req<R>('GET', '/api/redirect?app=unbekannt')).data.label).toBe('Social Media');
-  });
+    return { status: res.status, data: (await res.json().catch(() => null)) as T };
+  };
+  /** Server-Uhr vorstellen (Wartezeit, Aufgaben-Dauer), ohne echte Zeit zu verlieren. */
+  const later = (ms: number) => {
+    const real = Date.now();
+    return vi.spyOn(Date, 'now').mockReturnValue(real + ms);
+  };
+  afterEach(() => vi.restoreAllMocks());
 
-  it('im Social-Slot: erlaubt', async () => {
-    // Slot von vor 5 Minuten bis in 10 Minuten (feste Zeit, auch außerhalb der Arbeitszeit)
+  it('ein bloß geplanter Social-Slot gibt nichts frei, erst sein Start (Guthaben)', async () => {
     await req('POST', '/api/tasks', {
       title: 'Social',
       kind: 'social',
@@ -578,8 +633,141 @@ describe('Umleiten', () => {
       fixedAt: new Date(Date.now() - 5 * 60_000).toISOString(),
       minutes: 15,
     });
-    const r = await req<R>('GET', '/api/redirect?app=instagram');
-    expect(r.data.insideSlot).toBe(true);
+    const { key, gateUrl } = await gateKey();
+    expect(gateUrl).toBe(`https://fokus.test/api/v1/gate/${key}`);
+    expect((await info()).state).toBe('blocked');
+    expect(await gate(key)).toBe(`https://fokus.test/umleiten?app=instagram&k=${key}`);
+
+    await h.db.insert(creditEntry).values({ userId, minutes: 40, reason: 'focus' });
+    const r = await req<{ granted: number; passUntil: string }>('POST', '/api/credit/spend', {
+      minutes: 10,
+      reason: 'social',
+    });
+    expect(r.data.granted).toBe(10);
+    const until = new Date(r.data.passUntil).getTime() - Date.now();
+    expect(until).toBeGreaterThan(9 * 60_000);
+    expect(until).toBeLessThanOrEqual(10 * 60_000);
+    // Genau das war die Schleife: nach dem Bezahlen muss die App aufgehen
+    expect(await gate(key)).toBe('frei');
+    expect((await info()).state).toBe('free');
+    expect((await get(todayIn())).pass).not.toBeNull();
+    // nach Ablauf wieder zu
+    later(11 * 60_000);
+    expect(await gate(key)).toContain('/umleiten?app=instagram');
+  });
+
+  it('Guthaben nehmen: gibt genau so lange frei, ohne Guthaben nichts, im Fokus nie', async () => {
+    const { key } = await gateKey();
+    const empty = await info('tiktok');
+    expect(empty).toMatchObject({ label: 'TikTok', state: 'blocked', spend: 10, canSpend: 0 });
+    const none = await req<{ granted: number; passUntil: string | null }>(
+      'POST',
+      '/api/v1/redirect/spend',
+      {},
+    );
+    expect(none.data).toMatchObject({ granted: 0, passUntil: null });
+    expect(await gate(key, 'tiktok')).toContain('/umleiten?app=tiktok');
+
+    await h.db.insert(creditEntry).values({ userId, minutes: 7, reason: 'focus' });
+    expect((await info()).canSpend).toBe(7);
+    const some = await req<{
+      granted: number;
+      passUntil: string | null;
+      credit: { balance: number };
+    }>('POST', '/api/v1/redirect/spend', {});
+    expect(some.data).toMatchObject({ granted: 7, credit: { balance: 0 } });
+    expect(await gate(key)).toBe('frei');
+
+    const f = await req('POST', '/api/focus/start', { minutes: 25 });
+    expect(f.status).toBe(201);
+    expect(await gate(key)).toContain('/umleiten');
+    expect((await info()).state).toBe('focus');
+    expect((await info()).focus).not.toBeNull();
+    expect((await req('POST', '/api/v1/redirect/spend', {})).status).toBe(409);
+    expect((await req('POST', '/api/credit/spend', { minutes: 5, reason: 'social' })).status).toBe(
+      409,
+    );
+  });
+
+  it('Ausnahme: erst nach der Wartezeit, kostet auch ins Minus, höchstens 3 am Tag', async () => {
+    const first = await info();
+    expect(first.override).toEqual({ left: 3, cost: 5, waitSeconds: 15 });
+    const now = await req<{ error: string }>('POST', '/api/v1/redirect/override', {
+      ticket: first.ticket,
+    });
+    expect(now.status).toBe(400);
+    expect(now.data.error).toMatch(/warten/);
+    // gefälschtes Ticket
+    const fake = `${Date.now() - 60_000}.${'a'.repeat(43)}`;
+    expect((await req('POST', '/api/v1/redirect/override', { ticket: fake })).status).toBe(400);
+
+    for (let n = 1; n <= 3; n++) {
+      const t = (await info()).ticket;
+      const spy = later(16_000);
+      const r = await req<{
+        passUntil: string;
+        credit: { balance: number };
+        overridesLeft: number;
+      }>('POST', '/api/v1/redirect/override', { ticket: t });
+      spy.mockRestore();
+      expect(r.status).toBe(200);
+      expect(r.data.credit.balance).toBe(-5 * n);
+      expect(r.data.overridesLeft).toBe(3 - n);
+    }
+    const t = (await info()).ticket;
+    later(16_000);
+    expect((await req('POST', '/api/v1/redirect/override', { ticket: t })).status).toBe(429);
+    vi.restoreAllMocks();
+    // Schulden: Guthaben nehmen geht erst wieder nach Fokus
+    expect((await info()).canSpend).toBe(0);
+    expect((await info()).override.left).toBe(0);
+  });
+
+  it('kleine Aufgabe: nur eine echte, erst nach ihrer Dauer, ohne Guthaben', async () => {
+    const m = await req<Task>('POST', '/api/tasks', { title: 'Lena antworten', minutes: 2 });
+    const big = await req<Task>('POST', '/api/tasks', { title: 'Konzept', minutes: 30 });
+    const i = await info();
+    expect(i.task).toMatchObject({ id: m.data.id, minutes: 2 });
+    expect(i.fallback.length).toBeGreaterThan(3);
+    const early = await req('POST', '/api/v1/redirect/done', {
+      taskId: m.data.id,
+      ticket: i.ticket,
+    });
+    expect(early.status).toBe(400);
+    later(2 * 60_000);
+    expect(
+      (await req('POST', '/api/v1/redirect/done', { taskId: big.data.id, ticket: i.ticket }))
+        .status,
+    ).toBe(400);
+    const ok = await req('POST', '/api/v1/redirect/done', { taskId: m.data.id, ticket: i.ticket });
+    expect(ok.status).toBe(200);
+    vi.restoreAllMocks();
+    expect((await req<Task>('PUT', `/api/tasks/${m.data.id}`, {})).data.status).toBe('done');
+    expect((await info()).credit.balance).toBe(0);
+    expect((await info('unbekannt')).label).toBe('Social Media');
+  });
+
+  it('Schlüssel: neuer ersetzt alten, falscher liefert Hinweis, Seite geht ohne Sitzung', async () => {
+    expect(await gate('fk_falschfalschfalschfalsch')).toBe(
+      'https://fokus.test/umleiten?app=instagram&fehler=adresse',
+    );
+    const a = await gateKey();
+    const b = await gateKey();
+    expect(await gate(a.key)).toContain('fehler=adresse');
+    expect(await gate(b.key)).toContain(`k=${b.key}`);
+    expect((await req<{ active: boolean }>('GET', '/api/me/gate-key')).data.active).toBe(true);
+    // Umleiten-Seite in Safari ohne Sitzung, nur mit Schlüssel
+    const page = await withKey<R>(b.key, 'GET', '/api/v1/redirect?app=instagram');
+    expect(page.status).toBe(200);
+    expect(page.data.state).toBe('blocked');
+    expect((await withKey(b.key, 'POST', '/api/v1/redirect/spend', {})).status).toBe(200);
+    // ohne alles: nicht angemeldet; Schlüssel für etwas anderes: verboten
+    expect((await app.request('/api/v1/redirect?app=instagram')).status).toBe(401);
+    const other = await req<{ key: string }>('POST', '/api/me/keys', {
+      name: 'Notizen',
+      scopes: ['inbox:create'],
+    });
+    expect((await withKey(other.data.key, 'GET', '/api/v1/redirect')).status).toBe(403);
   });
 });
 

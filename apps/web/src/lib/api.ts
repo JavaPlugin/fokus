@@ -33,14 +33,21 @@ export const onUnauthorized = (fn: () => void) => void (unauthorized = fn);
 
 export async function api<T = void>(
   path: string,
-  init: { method?: string; body?: unknown } = {},
+  init: {
+    method?: string;
+    body?: unknown;
+    /** Schlüssel statt Sitzung (Umleiten) */ token?: string;
+  } = {},
 ): Promise<T> {
   let res: Response;
+  const headers: Record<string, string> = {};
+  if (init.body) headers['content-type'] = 'application/json';
+  if (init.token) headers.authorization = `Bearer ${init.token}`;
   try {
     res = await fetch(`${API_BASE}${path}`, {
       method: init.method ?? (init.body ? 'POST' : 'GET'),
       credentials: 'include',
-      headers: init.body ? { 'content-type': 'application/json' } : undefined,
+      headers,
       body: init.body ? JSON.stringify(init.body) : undefined,
       // Löschen soll auch beim Verlassen der Seite ankommen (Rückgängig-Toast, pagehide)
       keepalive: init.method === 'DELETE',

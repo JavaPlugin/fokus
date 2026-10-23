@@ -23,6 +23,8 @@ export const PUBLIC_PATHS = new Set([
   '/setup',
   '/einladung',
   '/partner',
+  // Kommt aus dem Kurzbefehl, oft in Safari ohne Sitzung: prüft selbst (Schlüssel oder Sitzung)
+  '/umleiten',
 ]);
 export const isPublicPath = (path: string) =>
   PUBLIC_PATHS.has(path.length > 1 && path.endsWith('/') ? path.slice(0, -1) : path);

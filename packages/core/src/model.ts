@@ -34,7 +34,7 @@ export interface PlanSettings {
   baselineScroll: number;
   /** Fokus-Minuten, ab denen ein Tag für die Serie zählt */
   streakGoal: number;
-  /** „Umleiten“: Guthaben für eine erledigte 2-Minuten-Aufgabe */
+  /** Nicht mehr genutzt (früher Bonus fürs Umleiten, war ein Schlupfloch). Bleibt für alte Daten. */
   redirectBonus: number;
   /** „Umleiten“: so viele Minuten nimmt „vom Guthaben nehmen“ */
   redirectSpend: number;

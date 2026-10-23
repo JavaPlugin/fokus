@@ -407,7 +407,11 @@ export function createApp({
   registerSettingsRoutes(app, { db });
   registerTaskRoutes(app, { db });
   registerDayRoutes(app, { db });
-  registerRedirectRoutes(app, { db });
+  registerRedirectRoutes(app, {
+    db,
+    publicUrl: env.PUBLIC_URL,
+    secret: env.BETTER_AUTH_SECRET,
+  });
   registerWeekRoutes(app, { db });
   registerRoomRoutes(app, { db, publicUrl: env.PUBLIC_URL });
   registerCalendarRoutes(app, { db, fetchFn: calendarFetch, resolve: webhookResolve });
