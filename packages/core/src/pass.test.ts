@@ -59,25 +59,31 @@ describe('Lockerungen erst ab morgen', () => {
         creditPerHour: 30,
         dailyLimit: 120,
         redirectSpend: 5,
-        baselineScroll: 200,
-        streakGoal: 10,
       }),
     ).toEqual({
       now: {},
-      later: {
-        creditPerHour: 30,
-        dailyLimit: 120,
-        redirectSpend: 5,
-        baselineScroll: 200,
-        streakGoal: 10,
-      },
+      later: { creditPerHour: 30, dailyLimit: 120, redirectSpend: 5 },
     });
   });
-  it('strenger und neutral = sofort', () => {
+  it('strenger und neutral (auch Statistik) = sofort', () => {
     expect(
-      splitSettingsChange(s, { creditPerHour: 10, dailyLimit: 30, focusMinutes: 25, week: [] }),
+      splitSettingsChange(s, {
+        creditPerHour: 10,
+        dailyLimit: 30,
+        focusMinutes: 25,
+        week: [],
+        streakGoal: 10,
+        baselineScroll: 200,
+      }),
     ).toEqual({
-      now: { creditPerHour: 10, dailyLimit: 30, focusMinutes: 25, week: [] },
+      now: {
+        creditPerHour: 10,
+        dailyLimit: 30,
+        focusMinutes: 25,
+        week: [],
+        streakGoal: 10,
+        baselineScroll: 200,
+      },
       later: {},
     });
   });

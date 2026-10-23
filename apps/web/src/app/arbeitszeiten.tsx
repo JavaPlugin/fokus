@@ -24,8 +24,6 @@ const LABELS: Partial<Record<keyof PlanSettings, (v: number) => string>> = {
   creditPerHour: (v) => `${v} Min Guthaben pro Fokus-Std`,
   dailyLimit: (v) => `höchstens ${v} Min am Tag`,
   redirectSpend: (v) => `${v} Min beim Umleiten`,
-  baselineScroll: (v) => `übliche Scroll-Zeit ${v} Min`,
-  streakGoal: (v) => `Serie ab ${v} Min`,
 };
 
 export default function Arbeitszeiten() {

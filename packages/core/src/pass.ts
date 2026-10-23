@@ -54,13 +54,11 @@ export function gateState(entries: CreditEntry[], now: number, focusRunning: boo
 
 // ---------- Einstellungen: Lockerungen erst ab morgen ----------
 
-/** Werte, deren Änderung in diese Richtung die Regeln lockert. */
+/** Werte, deren Änderung in diese Richtung mehr Social-Zeit bringt (nur Statistik zählt nicht). */
 const LOOSER: Partial<Record<keyof PlanSettings, 'up' | 'down'>> = {
   creditPerHour: 'up',
   dailyLimit: 'up',
   redirectSpend: 'down',
-  baselineScroll: 'up',
-  streakGoal: 'down',
 };
 
 /**

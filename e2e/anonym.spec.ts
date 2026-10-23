@@ -17,6 +17,8 @@ const PUBLIC = new Set([
   '/setup',
   '/einladung',
   '/partner',
+  // eigener Test unten: zeigt ohne Sitzung/Schlüssel nur „Nicht angemeldet“
+  '/umleiten',
 ]);
 const ID = '00000000-0000-4000-8000-000000000001';
 const EMAIL = 'admin@e2e.test';
@@ -35,6 +37,17 @@ function routes(dir = APP, base = ''): string[] {
     return [base + seg || '/'];
   });
 }
+
+test('Umleiten ohne Sitzung und Schlüssel: nur Hinweis, keine Daten', async ({ browser }) => {
+  const ctx = await browser.newContext();
+  const page = await ctx.newPage();
+  await page.goto('/umleiten?app=instagram');
+  await expect(page.getByText('Nicht angemeldet')).toBeVisible();
+  expect(await page.content()).not.toContain(EMAIL);
+  await page.goto('/umleiten?app=instagram&fehler=adresse');
+  await expect(page.getByText('Adresse gilt nicht mehr')).toBeVisible();
+  await ctx.close();
+});
 
 test('ohne Anmeldung: jede App-Seite führt zur Willkommensseite, nichts Persönliches im DOM', async ({
   browser,

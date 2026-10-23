@@ -3,8 +3,10 @@
 // Import: Zusammenführen überspringt vorhandene IDs, Ersetzen löscht vorher. Dateien anderer
 // Personen bekommen neue, feste IDs (UUIDv5 aus Nutzer + alte ID), damit nichts kollidiert.
 // Neue Fachtabellen (user_id) gehören in EXPORT_TABLES, und zwar nach den Tabellen, auf die sie zeigen.
+// Eine Datei ist leicht zu bearbeiten: Ein Import bringt deshalb nie mehr Guthaben als vorher
+// (Ausgleich als Korrektur „adjust“), und gelockerte Regeln gelten wie sonst erst ab morgen.
 import { createHash } from 'node:crypto';
-import { todayIn } from '@fokus/core';
+import { addDays, balanceOf, splitSettingsChange, todayIn, type PlanSettings } from '@fokus/core';
 import {
   calendarFeed,
   creditEntry,
@@ -22,6 +24,7 @@ import type { Context, Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { z } from 'zod';
 import type { SessionUser, Vars } from './app';
+import { loadCredit, loadSettings, resolvePlan, type PendingSettings } from './planning';
 
 export const EXPORT_FORMAT = 'fokus';
 export const SCHEMA_VERSION = 1;
@@ -159,6 +162,9 @@ export function registerDataRoutes(app: Hono<Vars>, { db }: { db: Db }) {
     }
     const foreign = file.exportedBy !== u.id;
     await withUser(db, u.id, async (tx) => {
+      const balanceBefore = balanceOf(await loadCredit(tx));
+      const settingsBefore = await loadSettings(tx);
+      const [rowBefore] = await tx.select({ p: userSettings.plan }).from(userSettings);
       if (b.data.mode === 'replace')
         for (const t of [...EXPORT_TABLES].reverse()) await tx.delete(t.table as never);
       for (const t of EXPORT_TABLES) {
@@ -168,6 +174,28 @@ export function registerDataRoutes(app: Hono<Vars>, { db }: { db: Db }) {
             .insert(t.table as never)
             .values(rows as never)
             .onConflictDoNothing();
+      }
+      // Kein Guthaben aus der Datei
+      const gained = balanceOf(await loadCredit(tx)) - Math.max(0, balanceBefore);
+      if (gained > 0)
+        await tx.insert(creditEntry).values({ userId: u.id, minutes: -gained, reason: 'adjust' });
+      // Regeln aus der Datei: Lockerungen erst ab morgen, wie beim Ändern
+      type Stored = Partial<PlanSettings> & { pending?: PendingSettings };
+      const [row] = await tx.select({ p: userSettings.plan }).from(userSettings);
+      const before = resolvePlan(rowBefore?.p as Stored | null);
+      const { own } = resolvePlan(row?.p as Stored | null);
+      const { later } = splitSettingsChange(settingsBefore, own);
+      if (row && Object.keys(later).length) {
+        const values = { ...(before.pending?.values ?? {}), ...later };
+        const kept = Object.fromEntries(
+          Object.keys(later).map((k) => [k, settingsBefore[k as keyof PlanSettings]]),
+        );
+        const plan = {
+          ...own,
+          ...kept,
+          pending: { from: addDays(todayIn(), 1), values },
+        };
+        await tx.update(userSettings).set({ plan });
       }
     });
     return c.json({ counts: countsOf(file) });

@@ -852,4 +852,22 @@ describe('Export und Import', () => {
     expect(new Set(all.map((x) => x.id)).size).toBe(2);
     expect((await req('POST', '/api/import', { text: 'kaputt', mode: 'merge' })).status).toBe(400);
   });
+
+  it('bearbeitete Datei: kein Guthaben dazu, Lockerungen erst ab morgen', async () => {
+    await h.db.insert(creditEntry).values({ userId, minutes: 20, reason: 'focus' });
+    await req('PUT', '/api/plan/settings', { focusMinutes: 25 });
+    type File = { data: { credit: Record<string, unknown>[]; settings: { plan: object }[] } };
+    const file = (await req<File>('GET', '/api/me/export')).data;
+    file.data.credit.push({ ...file.data.credit[0]!, id: crypto.randomUUID(), minutes: 9999 });
+    file.data.settings[0]!.plan = { focusMinutes: 25, creditPerHour: 60 };
+    const text = JSON.stringify(file);
+    expect((await req('POST', '/api/import', { text, mode: 'replace' })).status).toBe(200);
+    expect((await req<{ balance: number }>('GET', '/api/credit')).data.balance).toBe(20);
+    const s = await req<{ creditPerHour: number; pending: { values: object } | null }>(
+      'GET',
+      '/api/plan/settings',
+    );
+    expect(s.data.creditPerHour).toBe(15);
+    expect(s.data.pending?.values).toEqual({ creditPerHour: 60 });
+  });
 });
