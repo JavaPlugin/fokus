@@ -211,6 +211,9 @@ export function registerDayRoutes(app: Hono<Vars>, { db }: { db: Db }) {
       const settings = await loadSettings(tx);
       const [t] = b.taskId ? await tx.select().from(task).where(eq(task.id, b.taskId)) : [];
       if (b.taskId && !t) return { error: 'Aufgabe nicht gefunden.', status: 404 as const };
+      // Guthaben gibt es nur für Arbeit, nicht für einen „Fokus“ auf Pause oder Social-Zeit
+      if (t && t.kind !== 'work')
+        return { error: 'Fokus geht nur für Arbeit.', status: 400 as const };
       const planned = b.minutes ?? t?.minutes ?? settings.focusMinutes;
       const [s] = await tx
         .insert(focusSession)

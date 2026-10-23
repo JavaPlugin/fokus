@@ -70,7 +70,8 @@ Auftrag und Konzept: `PROMPT.md`. Design-Entwürfe: `design/` (HTML, im Browser 
 - Fix Umleiten: Kurzbefehl fragt `GET /api/v1/gate/<schlüssel>?app=…` (Text: `frei` oder Adresse von `/umleiten?app=…&k=<schlüssel>`; falscher Schlüssel → `…&fehler=adresse`). Schlüssel = `api_key` mit Recht `gate`, `POST /api/me/gate-key` ersetzt den alten, Klartext nur einmal (Web merkt ihn in `fk.gateUrl`). Automation: Inhalt von URL abrufen → Wenn enthält „umleiten“ → URLs öffnen. `/umleiten` ist öffentlich (`PUBLIC_PATHS`) und nutzt Sitzung oder Schlüssel (`api(…, { token })`).
 - Fix Umleiten: Routen `/api/v1/redirect` (Stand + Ticket), `/spend` (redirectSpend), `/override` (Ticket ≥ 15 s alt, HMAC mit `BETTER_AUTH_SECRET`, 5 Min auch ins Minus, 3 pro Tag), `/done` (nur offene Mini-Aufgabe ≤ 2 Min, erst nach ihrer Dauer, kein Guthaben). Bonus fürs Umleiten entfällt (`redirectBonus` bleibt nur für alte Daten). `/api/credit/spend` und Umleiten antworten 409 während eines Fokus-Blocks.
 - Fix Umleiten: Lockerungen (`creditPerHour`↑, `dailyLimit`↑, `redirectSpend`↓; Statistik-Werte wie Serie nicht) landen in `user_settings.plan.pending` (`{ from: morgen, values }`) und gelten erst ab dann (`resolvePlan` in `planning.ts`); Strengeres sofort. Fokus-Block höchstens 120 Min (`FOCUS_MAX`), Guthaben nur für die geplante Zeit. Erinnerung „Social-Zeit vorbei“ (nur Push, Schlüssel `pass:{ende}`).
-- Fix Umleiten: CI läuft auch bei Push auf `fix-**`.
+- Fix Umleiten: Fokus-Durchgang nur für Aufgaben der Art Arbeit (oder ohne Aufgabe). Import bringt kein Guthaben (Ausgleich `adjust`), Lockerungen aus der Datei landen in `pending`.
+- Fix Umleiten: CI läuft auch bei Push auf `fix-**`; Playwright meldet Fehler in CI als GitHub-Anmerkungen.
 
 ## Befehle
 

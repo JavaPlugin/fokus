@@ -534,6 +534,13 @@ describe('Fokus und Guthaben', () => {
     );
   });
 
+  it('Fokus nur für Arbeit: Social- oder Pause-Aufgabe bringt kein Guthaben', async () => {
+    const social = await req<Task>('POST', '/api/tasks', { title: 'Scrollen', kind: 'social' });
+    const pause = await req<Task>('POST', '/api/tasks', { title: 'Kaffee', kind: 'pause' });
+    expect((await req('POST', '/api/focus/start', { taskId: social.data.id })).status).toBe(400);
+    expect((await req('POST', '/api/focus/start', { taskId: pause.data.id })).status).toBe(400);
+  });
+
   it('vergessener Timer bringt nichts extra; ein Block höchstens 120 Min', async () => {
     const t = await req<Task>('POST', '/api/tasks', { title: 'Lang', minutes: 600 });
     const s0 = await req<{ id: string; plannedMinutes: number }>('POST', '/api/focus/start', {

@@ -178,6 +178,13 @@ export function RedirectGuide() {
         <Button label="Adresse testen" variant="secondary" onPress={() => void check()} />
       ) : null}
       {test ? <Body muted>{test}</Body> : null}
+      {state?.active ? (
+        <Body muted>
+          {state.lastUsedAt
+            ? `Zuletzt hat der Kurzbefehl ${new Date(state.lastUsedAt).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' })} nachgefragt.`
+            : 'Der Kurzbefehl hat noch nie nachgefragt. Öffne einmal die App, um ihn zu prüfen.'}
+        </Body>
+      ) : null}
       {url ? (
         <Button
           label="Neue Adresse (alte wird ungültig)"

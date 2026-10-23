@@ -99,8 +99,11 @@ export default function Umleiten() {
     return () => clearInterval(t);
   }, []);
 
+  // Im Browser im selben Tab (window.open ließe auf dem iPhone einen leeren Tab zurück)
   const openApp = () => {
-    if (info?.url) void Linking.openURL(info.url);
+    if (!info?.url) return;
+    if (Platform.OS === 'web') window.location.href = info.url;
+    else void Linking.openURL(info.url);
   };
 
   async function run(fn: () => Promise<void>) {
